@@ -1,0 +1,67 @@
+/* src/App.css */
+.dashboard {
+    display: flex;
+    height: 100vh;
+    background: linear-gradient(135deg, #6A0DAD, #000000); /* Purple to black gradient */
+  }
+  
+  .sidebar {
+    background-color: #2C003E; /* Dark purple for sidebar */
+    color: white;
+    min-width: 250px;
+    transition: width 0.3s ease;
+    padding-top: 1rem;
+    height: 100%;
+  }
+  
+  .sidebar h2 {
+    color: white;
+  }
+  
+  .sidebar-toggle {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    cursor: pointer;
+  }
+  
+  .sidebar-menu li {
+    list-style: none;
+    padding: 1rem;
+  }
+  
+  .sidebar-menu li a {
+    color: white;
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+  }
+  
+  .sidebar-menu li a:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .content {
+    flex-grow: 1;
+    padding: 1rem;
+  }
+  
+  .content-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .search-bar input {
+    padding: 0.5rem;
+    border-radius: 5px;
+    border: none;
+    width: 250px;
+  }
+  
+  .profile-avatar {
+    background-color: #ffffff;
+    color: #6A0DAD; /* Avatar to match theme */
+  }
+  
