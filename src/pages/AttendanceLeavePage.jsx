@@ -1,12 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { logAttendance } from "../redux/attendanceLeaveSlice"; // Import the logAttendance action
 import {
-  fetchAttendanceRequest,
-  fetchAttendanceSuccess,
-  fetchAttendanceFailure,
-  submitLeaveRequest,
-  fetchLeaveRequests,
+  fetchAttendanceData,
+  fetchLeaveRequestsData,
+  submitLeaveRequestData,
   clearSuccessMessage,
 } from "../redux/attendanceLeaveSlice"; // Adjust the import path as necessary
 import {
@@ -43,13 +40,12 @@ import Grid from "@mui/material/Grid";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorIcon from "@mui/icons-material/Error";
 import InfoIcon from "@mui/icons-material/Info";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { Calendar, momentLocalizer } from "react-big-calendar";
 import moment from "moment";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import Tooltip from "@mui/material/Tooltip";
 import SearchIcon from "@mui/icons-material/Search";
+import { useNotificationContext } from "../components/NotificationContext";
 
 const localizer = momentLocalizer(moment);
 
@@ -60,7 +56,6 @@ const LEAVE_TYPES = [
   { value: "Others", label: "Others" },
 ];
 
-// Styled Typography for Gradient Text
 const GradientText = styled(Typography)(({ theme }) => ({
   background:
     "linear-gradient(90deg, rgba(128,0,128,1) 0%, rgba(0,0,0,1) 100%)",
@@ -72,7 +67,7 @@ const GradientText = styled(Typography)(({ theme }) => ({
 
 const SubHeading = styled(Typography)(({ theme }) => ({
   fontWeight: "600",
-  color: "#e0e0e0", // Light gray for contrast against dark background
+  color: "#e0e0e0",
   borderBottom: "2px solid transparent",
   background:
     "linear-gradient(90deg, rgba(128,0,128,1) 0%, rgba(0,0,0,1) 100%)",
@@ -85,11 +80,15 @@ const SubHeading = styled(Typography)(({ theme }) => ({
 
 const AttendanceLeavePage = () => {
   const dispatch = useDispatch();
-  const { attendanceData, loading, leaveRequests, successMessage, error } =
-    useSelector((state) => state.attendanceLeave);
+  const {
+    attendanceData,
+    loading,
+    leaveRequests = [],
+    successMessage,
+    error,
+  } = useSelector((state) => state.attendanceLeave);
 
-  // Assuming we have a way to get the current employee's ID
-  const currentEmployeeId = "EMP001"; // Replace with actual logic to get the current employee's ID
+  const currentEmployeeId = useSelector((state) => state.auth.employee?.empId);
 
   const [leaveRequest, setLeaveRequest] = useState({
     type: "",
@@ -98,88 +97,33 @@ const AttendanceLeavePage = () => {
     status: "Pending",
   });
 
-  const checkDateConflict = (newStartDate, newEndDate) => {
-    return leaveRequests.some((request) => {
-      const existingStartDate = new Date(request.startDate);
-      const existingEndDate = new Date(request.endDate);
-      return (
-        (newStartDate >= existingStartDate &&
-          newStartDate <= existingEndDate) ||
-        (newEndDate >= existingStartDate && newEndDate <= existingEndDate) ||
-        (newStartDate <= existingStartDate && newEndDate >= existingEndDate)
-      );
-    });
-  };
-
   const [submitting, setSubmitting] = useState(false);
   const [filterText, setFilterText] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarSeverity, setSnackbarSeverity] = useState("error");
 
-  const calculateRemainingLeave = (leaveRequests) => {
-    const totalLeaveDays = attendanceData.remainingLeave[currentEmployeeId]; // Total leave days for the employee
-    const usedLeaveDays = leaveRequests.reduce((total, request) => {
-      const startDate = new Date(request.startDate);
-      const endDate = new Date(request.endDate);
-      const days = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1; // Calculate total days of leave
-      return total + days;
-    }, 0);
-    return totalLeaveDays - usedLeaveDays;
-  };
+  const { addNotifications } = useNotificationContext();
 
   useEffect(() => {
-    const fetchAttendanceData = async () => {
-      dispatch(fetchAttendanceRequest());
-      try {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-  
-        const today = new Date();
-        const dummyAttendance = [];
-  
-        // Create attendance data only for dates up to today
-        for (let day = 1; day <= 31; day++) {
-          const date = new Date(2024, 9, day); // October 2024
-          if (date > today) break; // Stop if the date exceeds today
-  
-          const dayOfWeek = date.getDay(); // 0 (Sunday) to 6 (Saturday)
-  
-          // Determine attendance based on day of the week
-          let status;
-          if (dayOfWeek === 0 || dayOfWeek === 6) {
-            // For weekends, randomly set present or absent
-            status = Math.random() < 0.5 ? "present" : "absent";
-          } else {
-            // For weekdays, assume present
-            status = "present";
-          }
-  
-          dummyAttendance.push({
-            date: date.toISOString().split("T")[0],
-            status,
-            employeeId: currentEmployeeId,
-          });
-        }
-  
-        // Calculate remaining leave based on current leave requests
-        const remainingLeave = calculateRemainingLeave(leaveRequests); // Calculate remaining leave
-  
-        dispatch(
-          fetchAttendanceSuccess({
-            totalDays: dummyAttendance.length,
-            attendance: dummyAttendance,
-            remainingLeave: { [currentEmployeeId]: remainingLeave }, // Update remaining leave for the current employee
-          })
-        );
-      } catch (error) {
-        dispatch(fetchAttendanceFailure("Failed to fetch attendance data"));
-      }
-    };
-  
-    fetchAttendanceData();
-  }, [dispatch, leaveRequests]); // Add leaveRequests to the dependency array
+    dispatch(fetchAttendanceData(currentEmployeeId)); // Fetch attendance data
+    dispatch(fetchLeaveRequestsData()); // Fetch leave requests
+  }, [dispatch, currentEmployeeId]);
+
+  useEffect(() => {
+    if (successMessage) {
+      setSnackbarMessage(successMessage);
+      setSnackbarSeverity("success");
+      setSnackbarOpen(true);
+      dispatch(clearSuccessMessage()); // Clear success message
+    }
+    if (error) {
+      setSnackbarMessage(error);
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+    }
+  }, [successMessage, error, dispatch]);
 
   const handleLeaveRequestSubmit = (event) => {
     event.preventDefault();
@@ -218,32 +162,21 @@ const AttendanceLeavePage = () => {
     setDialogOpen(true);
   };
 
-  // Function to handle confirmation in the dialog
   const handleConfirmSubmit = async () => {
     setSubmitting(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
-      dispatch(submitLeaveRequest(leaveRequest));
-  
-      // Log attendance as absent for the leave period
-      const startDate = new Date(leaveRequest.startDate);
-      const endDate = new Date(leaveRequest.endDate);
-      const days = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1; // Calculate total days of leave
-  
-      for (let i = 0; i < days; i++) {
-        const date = new Date(startDate);
-        date.setDate(startDate.getDate() + i);
-        dispatch(
-          logAttendance({
-            date: date.toISOString().split("T")[0],
-            status: "absent",
-            employeeId: currentEmployeeId,
-          })
-        );
-      }
-  
-      dispatch(fetchLeaveRequests()); // Fetch updated leave requests after submission
-  
+      await dispatch(
+        submitLeaveRequestData({
+          ...leaveRequest,
+          employeeId: currentEmployeeId,
+        })
+      );
+      addNotifications([
+        {
+          type: "info", // or "success", depending on how you want to categorize it
+          text: `New leave request submitted by Employee ID: ${currentEmployeeId} for ${leaveRequest.type} from ${leaveRequest.startDate} to ${leaveRequest.endDate}.`,
+        },
+      ]);
       setSnackbarMessage("Leave request submitted successfully!");
       setSnackbarSeverity("success");
       setSnackbarOpen(true);
@@ -255,27 +188,6 @@ const AttendanceLeavePage = () => {
       setDialogOpen(false);
       setSubmitting(false);
     }
-  };
-
-  const handleDateChange = (date) => {
-    // Update the current month
-  };
-
-  const eventStyleGetter = (event, start, end, isSelected) => {
-    const style = {
-      backgroundColor: "green",
-      borderRadius: "0px",
-      opacity: 0.8,
-      color: "black",
-      border: "0px",
-      display: "block",
-    };
-
-    if (event.status === "absent") {
-      style.backgroundColor = "red";
-    }
-
-    return { style };
   };
 
   const handleLeaveTypeChange = (event) => {
@@ -303,13 +215,17 @@ const AttendanceLeavePage = () => {
     setFilterText(event.target.value);
   };
 
-  const filteredLeaveRequests = leaveRequests.filter((leaveRequest) => {
-    return (
-      leaveRequest.type.toLowerCase().includes(filterText.toLowerCase()) ||
-      leaveRequest.startDate.toLowerCase().includes(filterText.toLowerCase()) ||
-      leaveRequest.endDate.toLowerCase().includes(filterText.toLowerCase())
-    );
-  });
+  const filteredLeaveRequests = Array.isArray(leaveRequests)
+    ? leaveRequests.filter((leaveRequest) => {
+        return (
+          leaveRequest.type.toLowerCase().includes(filterText.toLowerCase()) ||
+          leaveRequest.startDate
+            .toLowerCase()
+            .includes(filterText.toLowerCase()) ||
+          leaveRequest.endDate.toLowerCase().includes(filterText.toLowerCase())
+        );
+      })
+    : [];
 
   return (
     <Box sx={{ padding: 2 }}>
@@ -346,39 +262,13 @@ const AttendanceLeavePage = () => {
                     startAccessor="start"
                     endAccessor="end"
                     style={{ height: 400 }}
-                    eventPropGetter={eventStyleGetter}
-                    components={{
-                      event: ({ event }) => (
-                        <Tooltip title={event.title}>
-                          <div
-                            style={{
-                              backgroundColor:
-                                event.status === "absent" ? "red" : "green",
-                              borderRadius: "0px",
-                              opacity: 0.8,
-                              color: "black",
-                              border: "0px",
-                              display: "block",
-                              padding: "5px",
-                            }}
-                          >
-                            {event.title}
-                          </div>
-                        </Tooltip>
-                      ),
-                    }}
-                    onNavigate={(date) => handleDateChange(date)}
-                    onSelectEvent={(event) => console.log(event)}
+                    eventPropGetter={(event) => ({
+                      style: {
+                        backgroundColor:
+                          event.status === "absent" ? "red" : "green",
+                      },
+                    })}
                     selectable={true}
-                    navLink={({ date, label, onView, setActive }) => (
-                      <IconButton onClick={onView}>
-                        {label === "prev" ? (
-                          <ChevronLeftIcon />
-                        ) : (
-                          <ChevronRightIcon />
-                        )}
-                      </IconButton>
-                    )}
                   />
                 )}
               </CardContent>
@@ -390,11 +280,8 @@ const AttendanceLeavePage = () => {
               <CardContent>
                 <SubHeading variant="h6" component="h2">
                   Leave Request Form
-                </SubHeading>
-
+                </SubHeading>{" "}
                 <form onSubmit={(event) => event.preventDefault()}>
-                  {" "}
-                  {/* Prevent default form submission */}
                   <FormControl fullWidth sx={{ marginBottom: 2 }}>
                     <InputLabel id="leave-type-label">Leave Type</InputLabel>
                     <Select
@@ -448,7 +335,6 @@ const AttendanceLeavePage = () => {
                     {submitting ? "Submitting..." : "Submit Leave Request"}
                   </Button>
                 </form>
-
                 {/* Confirmation Dialog */}
                 <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>
                   <DialogTitle>Confirm Leave Request</DialogTitle>
@@ -554,7 +440,7 @@ const AttendanceLeavePage = () => {
           <Grid item xs={12}>
             <Card
               sx={{
-                bgcolor: "#f0f8ff",
+                bgcolor: "#f0f8 ff",
                 padding: 2,
                 borderRadius: 2,
                 boxShadow: 3,
@@ -594,9 +480,9 @@ const AttendanceLeavePage = () => {
                   <LinearProgress
                     variant="determinate"
                     value={
-                      (attendanceData.remainingLeave[currentEmployeeId] / 5) *
-                      100
-                    } // Assuming 5 is the total leave days for this example
+                      (attendanceData.remainingLeave[currentEmployeeId] / 30) *
+                      100 // Assuming 30 is the total leave days for this example
+                    }
                     sx={{ height: 10, borderRadius: 5 }}
                   />
                 </Box>

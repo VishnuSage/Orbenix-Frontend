@@ -25,9 +25,9 @@ import {
 } from "@mui/material";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
-import Switch from "@mui/material/Switch"; // Add this import
+import Switch from "@mui/material/Switch";
 import { useParams, useNavigate } from "react-router-dom";
-import { useSelector, useDispatch } from "react-redux"; // Import Redux hooks
+import { useSelector, useDispatch } from "react-redux";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 import EditIcon from "@mui/icons-material/Edit";
@@ -38,7 +38,7 @@ import {
   addEmployeeAsync,
   updateEmployeeAsync,
   deleteEmployeeAsync,
-} from "../redux/employeeSlice"; // Import actions from the slice
+} from "../redux/employeeSlice";
 
 const EmployeeManagementPage = () => {
   const [openDialog, setOpenDialog] = useState(false);
@@ -55,24 +55,20 @@ const EmployeeManagementPage = () => {
     emergencyContactName: "",
     emergencyContactRelationship: "",
     emergencyContactPhone: "",
-    roles: [], // Change to an array for multiple roles
+    roles: [],
   });
-  const [loading, setLoading] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
-  const [adminOptions, setAdminOptions] = useState({}); // State for admin options
-  const [openAccessModal, setOpenAccessModal] = useState(false); // State for access modal
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
-  const [searchQuery, setSearchQuery] = useState(""); // State for search query
+  const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
-  const { empId } = useParams(); // Changed id to empId
+  const { empId } = useParams();
   const dispatch = useDispatch();
 
-  // Select employees from Redux
   const employees = useSelector((state) => state.employees.employees);
   const status = useSelector((state) => state.employees.status);
-  const currentUserRole = useSelector((state) => state.auth.userRole); // Assuming you have this in your Redux store
+  const userRole = useSelector((state) => state.auth.userRole);
 
   useEffect(() => {
     if (status === "idle") {
@@ -82,7 +78,7 @@ const EmployeeManagementPage = () => {
 
   useEffect(() => {
     if (empId) {
-      const employeeToEdit = employees.find((emp) => emp.empId === empId); // Changed id to empId
+      const employeeToEdit = employees.find((emp) => emp.empId === empId);
       if (employeeToEdit) {
         setEmployee(employeeToEdit);
         setCurrentTab(1);
@@ -94,7 +90,7 @@ const EmployeeManagementPage = () => {
     setCurrentTab(newValue);
     if (newValue === 0) {
       setEmployee({
-        empId: "", // Reset empId when switching back to Employee List
+        empId: "",
         name: "",
         position: "",
         department: "",
@@ -104,9 +100,9 @@ const EmployeeManagementPage = () => {
         emergencyContactName: "",
         emergencyContactRelationship: "",
         emergencyContactPhone: "",
-        roles: [], // Reset roles to an empty array
+        roles: [],
       });
-      setPage(0); // Reset to the first page when switching back to Employee List
+      setPage(0);
     }
   };
 
@@ -119,17 +115,12 @@ const EmployeeManagementPage = () => {
     e.preventDefault();
     try {
       if (empId) {
-        await dispatch(updateEmployeeAsync(employee)); // Corrected dispatch
+        await dispatch(updateEmployeeAsync(employee));
         setSnackbarMessage("Employee updated successfully!");
       } else {
         const { empId, ...newEmployee } = employee;
         newEmployee.roles = employee.roles;
-        if (currentUserRole === "super admin") {
-          await dispatch(addEmployeeAsync(newEmployee));
-        } else {
-          newEmployee.role = "employee";
-          await dispatch(addEmployeeAsync(newEmployee));
-        }
+        await dispatch(addEmployeeAsync(newEmployee));
         setSnackbarMessage("Employee added successfully!");
       }
       setSnackbarOpen(true);
@@ -145,7 +136,7 @@ const EmployeeManagementPage = () => {
 
   const handleEditClick = (employee) => {
     setEmployee(employee);
-    setCurrentTab(1); // Switch to edit tab
+    setCurrentTab(1);
   };
 
   const handleDeleteClick = (employee) => {
@@ -155,7 +146,7 @@ const EmployeeManagementPage = () => {
 
   const handleConfirmDelete = async () => {
     try {
-      await dispatch(deleteEmployeeAsync(employeeToDelete.empId)); // Use the async thunk for deletion
+      await dispatch(deleteEmployeeAsync(employeeToDelete.empId));
       setSnackbarMessage("Employee deleted successfully!");
       setSnackbarOpen(true);
       setOpenDialog(false);
@@ -188,27 +179,12 @@ const EmployeeManagementPage = () => {
   };
 
   const handleSearchChange = (e) => {
-    setSearchQuery(e.target.value); // Update search query state
+    setSearchQuery(e.target.value);
   };
 
   const handleRoleChange = (e) => {
     const { value } = e.target;
-    setEmployee({ ...employee, roles: value }); // Update roles state with selected values
-  };
-
-  const handleAccessClick = () => {
-    setOpenAccessModal(true);
-  };
-
-  const handleAccessModalClose = () => {
-    setOpenAccessModal(false);
-  };
-
-  const handleToggleOption = (option) => {
-    setAdminOptions((prev) => ({
-      ...prev,
-      [option]: !prev[option],
-    }));
+    setEmployee({ ...employee, roles: value });
   };
 
   return (
@@ -240,27 +216,26 @@ const EmployeeManagementPage = () => {
                 display: "flex",
                 justifyContent: "center",
                 "& .MuiTabs-flexContainer": {
-                  justifyContent: "center", // Center the tab items
+                  justifyContent: "center",
                 },
               }}
             >
               <Tab value={0} label="Employee List" sx={{ flexGrow: 1 }} />
               <Tab value={1} label="Add/Edit Employee" sx={{ flexGrow: 1 }} />
-              {currentUserRole === "super admin" && (
+              {userRole === "super admin" && (
                 <Tab value={2} label="Admin Access" sx={{ flexGrow: 1 }} />
               )}
             </Tabs>
           </Box>
           {currentTab === 0 && (
             <Box sx={{ p: 2 }}>
-              {/* Search Bar */}
               <Box sx={{ mb: 2 }}>
                 <TextField
                   label="Search by ID or Name"
                   variant="outlined"
                   fullWidth
                   value={searchQuery}
-                  onChange={handleSearchChange} // Add this handler
+                  onChange={handleSearchChange}
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
@@ -281,18 +256,16 @@ const EmployeeManagementPage = () => {
                       <TableCell>Name</TableCell>
                       <TableCell>Position</TableCell>
                       <TableCell>Department</TableCell>
-                      {currentUserRole === "super admin" && (
+                      {userRole === "super admin" && (
                         <TableCell>Role</TableCell>
-                      )}{" "}
-                      {/* Show Role column only for super admin */}
+                      )}
                       <TableCell>Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {employees
                       .filter((emp) => {
-                        // Show all employees for super admin, otherwise only show employees with role "employee"
-                        if (currentUserRole === "super admin") {
+                        if (userRole === "super admin") {
                           return (
                             emp.empId.toString().includes(searchQuery) ||
                             emp.name
@@ -325,10 +298,9 @@ const EmployeeManagementPage = () => {
                           <TableCell>{employee.name}</TableCell>
                           <TableCell>{employee.position}</TableCell>
                           <TableCell>{employee.department}</TableCell>
-                          {currentUserRole === "super admin" && (
-                            <TableCell>{employee.roles.join(", ")}</TableCell> // Join roles for display
+                          {userRole === "super admin" && (
+                            <TableCell>{employee.roles.join(", ")}</TableCell>
                           )}
-                          {/* Show Role only for super admin */}
                           <TableCell>
                             <Button onClick={() => handleEditClick(employee)}>
                               <EditIcon />
@@ -377,33 +349,22 @@ const EmployeeManagementPage = () => {
                   <Grid item xs={12} sm={6}>
                     <TextField
                       required
-                      id="position" // Ensure the id matches
-                      name="position" // Ensure the name matches
-                      label="Position" // Label for the input
-                      value={employee.position} // Bind the value to the employee state
-                      onChange={handleChange} // Handle changes
+                      id="position"
+                      name="position"
+                      label="Position"
+                      value={employee.position}
+                      onChange={handleChange}
                       fullWidth
                     />
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <TextField
                       required
-                      id="department" // Ensure the id matches
-                      name="department" // Ensure the name matches
-                      label="Department" // Label for the input
-                      value={employee.department} // Bind the value to the employee state
-                      onChange={handleChange} // Handle changes
-                      fullWidth
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      required
-                      id="manager"
-                      name="manager"
-                      label="Manager"
-                      value={employee.manager} // Bind the value to the employee state
-                      onChange={handleChange} // Handle changes
+                      id="department"
+                      name="department"
+                      label="Department"
+                      value={employee.department}
+                      onChange={handleChange}
                       fullWidth
                     />
                   </Grid>
@@ -473,7 +434,7 @@ const EmployeeManagementPage = () => {
                       fullWidth
                     />
                   </Grid>
-                  {currentUserRole === "super admin" && (
+                  {userRole === "super admin" && (
                     <Grid item xs={12} sm={6}>
                       <Select
                         multiple
@@ -487,8 +448,7 @@ const EmployeeManagementPage = () => {
                       >
                         <MenuItem value="employee">Employee</MenuItem>
                         <MenuItem value="admin">Admin</MenuItem>
-                        <MenuItem value="manager">Manager</MenuItem>{" "}
-                        {/* Add other roles as needed */}
+                        <MenuItem value="manager">Manager</MenuItem>
                       </Select>
                     </Grid>
                   )}
@@ -502,38 +462,6 @@ const EmployeeManagementPage = () => {
                   {empId ? "Update" : "Add"}
                 </Button>
               </form>
-            </Box>
-          )}
-          {currentTab === 2 && currentUserRole === "super admin" && (
-            <Box sx={{ p: 2 }}>
-              <Typography variant="h5">Admin Access Management</Typography>
-              <TableContainer
-                component={Paper}
-                sx={{ backgroundColor: "white" }}
-              >
-                <Table sx={{ minWidth: 650 }} aria-label="admin access table">
-                  <TableHead>
-                    <TableRow sx={{ backgroundColor: "#E0BBE4" }}>
-                      <TableCell>Admin ID</TableCell>
-                      <TableCell>Name</TableCell>
-                      <TableCell>Access</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {employees
-                      .filter((emp) => emp.roles.includes("admin"))
-                      .map((admin) => (
-                        <TableRow key={admin.empId}>
-                          <TableCell>{admin.empId}</TableCell>
-                          <TableCell>{admin.name}</TableCell>
-                          <TableCell>
-                            <Button onClick={handleAccessClick}>Access</Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
             </Box>
           )}
           <Snackbar
@@ -556,31 +484,6 @@ const EmployeeManagementPage = () => {
               </Button>
               <Button onClick={handleConfirmDelete} color="secondary">
                 Delete
-              </Button>
-            </DialogActions>
-          </Dialog>
-          <Dialog open={openAccessModal} onClose={handleAccessModalClose}>
-            <DialogTitle>Admin Access Options</DialogTitle>
-            <DialogContent>
-              <Box>
-                {["Option 1", "Option 2", "Option 3"].map((option) => (
-                  <Box
-                    key={option}
-                    sx={{ display: "flex", alignItems: "center", mb: 1 }}
-                  >
-                    <Typography variant="body1">{option}</Typography>
-                    <Switch
-                      checked={adminOptions[option] || false}
-                      onChange={() => handleToggleOption(option)}
-                      color="primary"
-                    />
-                  </Box>
-                ))}
-              </Box>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={handleAccessModalClose} color="primary">
-                Close
               </Button>
             </DialogActions>
           </Dialog>

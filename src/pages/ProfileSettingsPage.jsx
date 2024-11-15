@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import userPlaceholder from "../assets/user.png";
 import {
   Box,
@@ -16,8 +16,12 @@ import {
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit"; // Importing the Edit icon
 import CloseIcon from "@mui/icons-material/Close";
-import { useSelector, useDispatch } from 'react-redux';
-import { updateProfile, setProfileImage } from '../redux/profileSlice'; // Import actions
+import { useSelector, useDispatch } from "react-redux";
+import {
+  fetchEmployeeProfile,
+  updateEmployeeProfile,
+  setProfileImage,
+} from "../redux/profileSlice"; // Import actions
 
 const ProfileImage = ({ imageSrc, onImageChange, editable }) => {
   const fileInputRef = useRef(null);
@@ -74,15 +78,26 @@ const ProfileImage = ({ imageSrc, onImageChange, editable }) => {
   );
 };
 
-const ProfileSettingsPage = () => {
+const ProfileSettingsPage = ({ empId }) => {
+  // Accept empId as a prop
   const dispatch = useDispatch();
   const profileData = useSelector((state) => state.profile);
-  
+
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState(profileData);
   const [error, setError] = useState("");
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false); // Loading state
+
+  // Fetch employee profile data when the component mounts
+  useEffect(() => {
+    dispatch(fetchEmployeeProfile(empId)); // Fetch profile data by employee ID
+  }, [dispatch, empId]);
+
+  // Update formData when profileData changes
+  useEffect(() => {
+    setFormData(profileData);
+  }, [profileData]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -122,7 +137,7 @@ const ProfileSettingsPage = () => {
     }
 
     setIsLoading(true); // Start loading
-    dispatch(updateProfile(formData)) // Dispatch action to update profile
+    dispatch(updateEmployeeProfile(formData)) // Dispatch action to update profile
       .then(() => {
         setEditMode(false);
         setError("");
@@ -142,11 +157,13 @@ const ProfileSettingsPage = () => {
   };
 
   return (
-    <Box sx={{ padding: 4, backgroundColor: "transparent", minHeight: "100vh" }}>
+    <Box
+      sx={{ padding: 4, backgroundColor: "transparent", minHeight: "100vh" }}
+    >
       {isLoading && <LinearProgress />}
       <Grid container spacing={2}>
         {/* Profile Information Card */}
-        <Grid item xs={ 12} md={4}>
+        <Grid item xs={12} md={4}>
           <Card
             variant="outlined"
             sx={{
@@ -165,7 +182,7 @@ const ProfileSettingsPage = () => {
                 </Grid>
                 <Grid item xs={12}>
                   <Typography>{profileData.name}</Typography>
-                  <Typography>Employee ID: {profileData.employeeId}</Typography>
+                  <Typography>Employee ID: {profileData.empId}</Typography>
                   <Typography>{profileData.jobTitle}</Typography>
                   <Typography>Department: {profileData.department}</Typography>
                   <Typography>Manager: {profileData.manager}</Typography>
@@ -177,14 +194,12 @@ const ProfileSettingsPage = () => {
 
         {/* Contact Information Card */}
         <Grid item xs={12} md={8}>
-          {" "}
-          {/* Adjusted md value to increase width */}
           <Card
             variant="outlined"
             sx={{
               borderRadius: 2,
               boxShadow: 2,
-              position: "relative", // Make the card relative for absolute positioning of the icon
+              position: "relative",
               height: "320px",
               display: "flex",
               flexDirection: "column",
@@ -192,7 +207,7 @@ const ProfileSettingsPage = () => {
           >
             <IconButton
               aria-label="edit"
-              onClick={handleEditClick} // Function to handle edit action
+              onClick={handleEditClick}
               sx={{
                 position: "absolute",
                 top: 5,
@@ -205,7 +220,14 @@ const ProfileSettingsPage = () => {
             >
               <EditIcon />
             </IconButton>
-            <CardContent sx={{ padding: 4,flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+            <CardContent
+              sx={{
+                padding: 4,
+                flexGrow: 1,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
               <Grid container spacing={2} sx={{ flexGrow: 1 }}>
                 <Grid item xs={12} sx={{ flexGrow: 1 }}>
                   <Grid container spacing={1}>
@@ -304,7 +326,7 @@ const ProfileSettingsPage = () => {
       >
         <Card
           variant="outlined"
-          sx ={{
+          sx={{
             padding: 4,
             borderRadius: 2,
             overflowY: "auto",

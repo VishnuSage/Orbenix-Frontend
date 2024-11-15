@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import allApi from './allApi'; // Import the allApi functions
+import allApi from '../services/allApi';
 
 // Async thunk for fetching employees from the API
 export const fetchEmployees = createAsyncThunk(
@@ -52,8 +52,8 @@ export const deleteEmployeeAsync = createAsyncThunk(
 const employeeSlice = createSlice({
   name: "employees",
   initialState: {
-    employees: [], // Start with an empty array
-    status: "idle", // 'idle' | 'loading' | 'succeeded' | 'failed'
+    employees: [],
+    status: "idle",
     error: null,
   },
   reducers: {},
@@ -64,35 +64,31 @@ const employeeSlice = createSlice({
       })
       .addCase(fetchEmployees.fulfilled, (state, action) => {
         state.status = "succeeded";
-        state.employees = action.payload; // Use data from API
+        state.employees = action.payload;
       })
       .addCase(fetchEmployees.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message;
       })
-      .addCase(addEmployeeAsync.fulfilled , (state, action) => {
-        state.employees.push(action.payload); // Use data from API
+      .addCase(addEmployeeAsync.fulfilled, (state, action) => {
+        state.employees.push(action.payload);
       })
       .addCase(updateEmployeeAsync.fulfilled, (state, action) => {
         const index = state.employees.findIndex(
           (emp) => emp.empId === action.payload.empId
         );
         if (index !== -1) {
-          state.employees[index] = action.payload; // Update employee details including roles
+          state.employees[index] = action.payload;
         }
       })
       .addCase(deleteEmployeeAsync.fulfilled, (state, action) => {
         state.employees = state.employees.filter(
-          (emp) => emp.empId !== action.payload // Remove employee from the state
+          (emp) => emp.empId !== action.payload
         );
       });
   },
 });
 
-// Selector to check if an employee exists
-export const selectEmployeeExists = (state, { email, phone }) =>
-  state.employees.employees.some(
-    (emp) => emp.email === email || emp.phone === phone
-  );
+export const selectEmployeeExists = (state, empId) => state.employees.employees.some(emp => emp.empId === empId);
 
 export default employeeSlice.reducer;

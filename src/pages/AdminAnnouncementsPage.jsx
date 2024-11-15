@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Box,
@@ -14,36 +14,49 @@ import {
   MenuItem,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit"; // Import Edit icon
+import EditIcon from "@mui/icons-material/Edit";
 import {
-  addAnnouncement,
-  removeAnnouncement,
-  updateAnnouncement,
-  selectAnnouncements,
+  fetchAnnouncements,
+  addAnnouncementAsync,
+  removeAnnouncementAsync,
+  updateAnnouncementAsync,
   setContactEmail,
-} from "../redux/announcementsSlice"; // Adjust the path as necessary
+  selectAnnouncements,
+} from "../redux/announcementsSlice";
+import { useNotificationContext } from "../components/NotificationContext";
 
 const AdminAnnouncementsPage = () => {
   const [announcementText, setAnnouncementText] = useState("");
   const [announcementCategory, setAnnouncementCategory] =
     useState("Policy Updates");
-  const [editingId, setEditingId] = useState(null); // State to track which announcement is being edited
+  const [editingId, setEditingId] = useState(null);
   const dispatch = useDispatch();
   const announcements = useSelector(selectAnnouncements);
   const [email, setEmail] = useState("");
+  const { addNotifications } = useNotificationContext(); // Use the notification context
 
   const categories = ["Policy Updates", "Events", "Important Dates"];
+
+  useEffect(() => {
+    dispatch(fetchAnnouncements());
+  }, [dispatch]);
 
   const handleAddAnnouncement = () => {
     if (announcementText.trim()) {
       const newAnnouncement = {
-        id: Date.now().toString(), // Generate a unique ID
         text: announcementText,
         category: announcementCategory,
         date: new Date(),
-        link: `/announcements/${Date.now()}`, // Example link
       };
-      dispatch(addAnnouncement(newAnnouncement));
+      dispatch(addAnnouncementAsync(newAnnouncement)).then(() => {
+        // Notify employees when a new announcement is added
+        addNotifications([
+          {
+            text: `New announcement added in category: "${announcementCategory}"`,
+            type: "info",
+          },
+        ]);
+      });
       resetForm();
     }
   };
@@ -51,7 +64,7 @@ const AdminAnnouncementsPage = () => {
   const handleEditAnnouncement = (announcement) => {
     setAnnouncementText(announcement.text);
     setAnnouncementCategory(announcement.category);
-    setEditingId(announcement.id); // Set the ID of the announcement being edited
+    setEditingId(announcement.id);
   };
 
   const handleUpdateAnnouncement = () => {
@@ -60,10 +73,17 @@ const AdminAnnouncementsPage = () => {
         id: editingId,
         text: announcementText,
         category: announcementCategory,
-        date: new Date(), // Update the date if needed
-        link: `/announcements/${editingId}`, // Maintain the same link
+        date: new Date(),
       };
-      dispatch(updateAnnouncement(updatedAnnouncement));
+      dispatch(updateAnnouncementAsync(updatedAnnouncement)).then(() => {
+        // Notify employees when an announcement is updated
+        addNotifications([
+          {
+            text: `Announcement updated in category: "${announcementCategory}"`,
+            type: "info",
+          },
+        ]);
+      });
       resetForm();
     }
   };
@@ -71,11 +91,24 @@ const AdminAnnouncementsPage = () => {
   const resetForm = () => {
     setAnnouncementText("");
     setAnnouncementCategory("Policy Updates");
-    setEditingId(null); // Reset editing ID
+    setEditingId(null);
   };
 
   const handleRemoveAnnouncement = (id) => {
-    dispatch(removeAnnouncement(id));
+    const announcementToRemove = announcements.find(
+      (announcement) => announcement.id === id
+    );
+    if (announcementToRemove) {
+      dispatch(removeAnnouncementAsync(id)).then(() => {
+        // Notify employees when an announcement is removed
+        addNotifications([
+          {
+            text: `Announcement removed from category: "${announcementToRemove.category}"`,
+            type: "warning",
+          },
+        ]);
+      });
+    }
   };
 
   const handleEmailChange = (e) => {
@@ -84,7 +117,7 @@ const AdminAnnouncementsPage = () => {
 
   const handleSetEmail = () => {
     if (email.trim()) {
-      dispatch(setContactEmail(email)); // Dispatch the action to update email
+      dispatch(setContactEmail(email));
     }
   };
 
@@ -152,13 +185,13 @@ const AdminAnnouncementsPage = () => {
           value={email}
           onChange={handleEmailChange}
           fullWidth
-          sx={{ flexGrow: 1, marginRight: 1 }} // Allow TextField to grow and add margin to the right
+          sx={{ flexGrow: 1, marginRight: 1 }}
         />
         <Button
           variant="contained"
           color="primary"
           onClick={handleSetEmail}
-          sx={{ flexShrink: 0 }} // Prevent the button from shrinking
+          sx={{ flexShrink: 0 }}
         >
           Set Email
         </Button>

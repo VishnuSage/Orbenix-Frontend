@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import PropTypes from "prop-types";
 import {
   Box,
   TextField,
@@ -15,8 +16,11 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import { useDispatch } from "react-redux";
+import { updateUserPassword } from "../redux/authSlice"; // Import your action to update the user password
 
-const ChangePassword = ({ onClose, user, setUser  }) => {
+const ChangePassword = ({ onClose, user }) => {
+  const dispatch = useDispatch();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -26,21 +30,36 @@ const ChangePassword = ({ onClose, user, setUser  }) => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [passwordValidationMessage, setPasswordValidationMessage] = useState("");
+  const [passwordValidationMessage, setPasswordValidationMessage] =
+    useState("");
 
   const validatePassword = (password) => {
     const conditions = [
-      { satisfied: password.length >= 6, message: "At least 6 characters long" },
-      { satisfied: /[0-9]/.test(password), message: "Contains at least one number" },
-      { satisfied: /[a-zA-Z]/.test(password), message: "Contains at least one letter" },
-      { satisfied: /[!@#$%^&*(),.?":{}|<>]/.test(password), message: "Contains at least one special character" },
+      {
+        satisfied: password.length >= 6,
+        message: "At least 6 characters long",
+      },
+      {
+        satisfied: /[0-9]/.test(password),
+        message: "Contains at least one number",
+      },
+      {
+        satisfied: /[a-zA-Z]/.test(password),
+        message: "Contains at least one letter",
+      },
+      {
+        satisfied: /[!@#$%^&*(),.?":{}|<>]/.test(password),
+        message: "Contains at least one special character",
+      },
     ];
 
     const unsatisfiedConditions = conditions
-      .filter(condition => !condition.satisfied)
-      .map(condition => condition.message);
+      .filter((condition) => !condition.satisfied)
+      .map((condition) => condition.message);
 
-    return unsatisfiedConditions.length > 0 ? unsatisfiedConditions.join(', ') : '';
+    return unsatisfiedConditions.length > 0
+      ? unsatisfiedConditions.join(", ")
+      : "";
   };
 
   const handleNewPasswordChange = (e) => {
@@ -53,18 +72,6 @@ const ChangePassword = ({ onClose, user, setUser  }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     setError("");
-
-    // Check if the current password is correct
-    if (currentPassword !== user.password) {
-      setError("Current password is incorrect");
-      return;
-    }
-
-    // Prevent reusing the old password
-    if (newPassword === currentPassword) {
-      setError("New password cannot be the same as the current password");
-      return;
-    }
 
     // Check if the new password meets validation
     if (passwordValidationMessage) {
@@ -81,12 +88,23 @@ const ChangePassword = ({ onClose, user, setUser  }) => {
     setOpenDialog(true);
   };
 
-  const handleConfirmChangePassword = () => {
-    // Simulate changing the password
-    setUser ((prevUser ) => ({ ...prevUser , password: newPassword }));
-    setSuccess(true);
-    setOpenDialog(false);
-    onClose(); // Close the dialog
+  const handleConfirmChangePassword = async () => {
+    try {
+      // Dispatch the action to update the password in the Redux store
+      await dispatch(
+        updateUserPassword({
+          empId: user.empId, // Pass empId for identification
+          emailOrPhone: user.emailOrPhone, // Use email or phone for authentication
+          currentPassword,
+          newPassword,
+        })
+      );
+      setSuccess(true);
+      setOpenDialog(false);
+      onClose(); // Close the dialog
+    } catch (error) {
+      setError("Failed to change password. Please try again.");
+    }
   };
 
   const handleSnackbarClose = () => {
@@ -94,18 +112,14 @@ const ChangePassword = ({ onClose, user, setUser  }) => {
   };
 
   const passwordStrength = () => {
-    if (newPassword.length < 6) return { strength: "Weak", color: "red" }; // Red for weak
-    if (newPassword.length < 10) return { strength: "Moderate", color: "yellow" }; // Yellow for moderate
-    return { strength: "Strong", color: "green" }; // Green for strong
+    if (newPassword.length < 6) return { strength: "Weak", color: "red" };
+    if (newPassword.length < 10)
+      return { strength: "Moderate", color: "orange" };
+    return { strength: "Strong", color: "green" };
   };
 
   return (
-    <Dialog
-      open={true}
-      onClose={onClose}
-      maxWidth="sm" // Adjust max width of the dialog
-      fullWidth // Make the dialog full width
-    >
+    <Dialog open={true} onClose={onClose} maxWidth="sm" fullWidth>
       <Box
         component="form"
         onSubmit={handleSubmit}
@@ -127,109 +141,95 @@ const ChangePassword = ({ onClose, user, setUser  }) => {
         >
           <CloseIcon />
         </IconButton>
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          Change Password
-        </Typography>
-        <TextField
-          label="Current Password"
-          type={showCurrentPassword ? "text" : "password"}
-          value={currentPassword}
-          onChange={(e) => setCurrentPassword(e.target.value)}
-          required
-          variant="outlined"
-          fullWidth
-          InputProps={{
-            endAdornment: (
-              <IconButton
-                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-              >
-                {showCurrentPassword ? <VisibilityOff /> : <Visibility />}
-              </IconButton>
-            ),
-          }}
-        />
-        <TextField
-          label="New Password"
-          type={showNewPassword ? "text" : "password"}
-          value={newPassword}
-          onChange={handleNewPasswordChange}
-          required
-          variant="outlined"
-          fullWidth
-          InputProps={{
-            endAdornment: (
-              <IconButton onClick={() => setShowNewPassword(!showNewPassword)}>
-                {showNewPassword ? <VisibilityOff /> : <Visibility />}
-              </IconButton>
-            ),
-          }}
-        />
-        {newPassword && (
-          <Typography variant="caption" color={passwordStrength().color}>
+        <DialogTitle>Change Password</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            To change your password, please enter your current password and the
+            new password.
+          </DialogContentText>
+          <TextField
+            label="Current Password"
+            type={showCurrentPassword ? "text" : "password"}
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            fullWidth
+            InputProps={{
+              endAdornment: (
+                <IconButton
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                >
+                  {showCurrentPassword ? <VisibilityOff /> : <Visibility />}
+                </IconButton>
+              ),
+            }}
+          />
+          <TextField
+            label="New Password"
+            type={showNewPassword ? "text" : "password"}
+            value={newPassword}
+            onChange={handleNewPasswordChange}
+            fullWidth
+            error={!!passwordValidationMessage}
+            helperText={passwordValidationMessage}
+            InputProps={{
+              endAdornment: (
+                <IconButton
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                >
+                  {showNewPassword ? <VisibilityOff /> : <Visibility />}
+                </IconButton>
+              ),
+            }}
+          />
+          <TextField
+            label="Confirm New Password"
+            type={showConfirmPassword ? "text" : "password"}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            fullWidth
+          />
+          <Typography color={passwordStrength().color}>
             Password Strength: {passwordStrength().strength}
           </Typography>
-        )}
-        {passwordValidationMessage && (
-          <Typography variant="caption" color="error">
-            {passwordValidationMessage}
-          </Typography>
-        )}
-        <TextField
-          label="Confirm New Password"
-          type={showConfirmPassword ? "text" : "password"}
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          required
-          variant="outlined"
-          fullWidth
-          InputProps={{
-            endAdornment: (
-              <IconButton
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              >
-                {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
-              </IconButton>
-            ),
-          }}
-        />
-        {error && (
-          <Typography variant="caption" color="error">
-            {error}
-          </Typography>
-        )}
-        <Button type="submit" variant="contained" color="primary" fullWidth>
-          Change Password
-        </Button>
-      </Box>
-      <Dialog
-        open={openDialog}
-        onClose={() => setOpenDialog(false)}
-        aria-labelledby="alert-dialog-title"
-        aria-describedby="alert-dialog-description"
-      >
-        <DialogTitle id="alert-dialog-title">
-          Confirm Password Change
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText id="alert-dialog-description">
-            Are you sure you want to change your password?
-          </DialogContentText>
+          {error && <Typography color="red">{error}</Typography>}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button onClick={handleConfirmChangePassword} autoFocus>
-            Confirm
+          <Button onClick={onClose}>Cancel</Button>
+          <Button type="submit" color="primary">
+            Change Password
           </Button>
         </DialogActions>
-      </Dialog>
+      </Box>
       <Snackbar
         open={success}
         autoHideDuration={6000}
         onClose={handleSnackbarClose}
         message="Password changed successfully!"
       />
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
+        <DialogTitle>Confirm Change</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to change your password?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
+          <Button onClick={handleConfirmChangePassword} color="primary">
+            Confirm
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
+};
+
+ChangePassword.propTypes = {
+  onClose: PropTypes.func.isRequired,
+  user: PropTypes.shape({
+    empId: PropTypes.string.isRequired,
+    emailOrPhone: PropTypes.string.isRequired,
+  }).isRequired,
 };
 
 export default ChangePassword;

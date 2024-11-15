@@ -17,7 +17,6 @@ import {
   TableRow,
   Paper,
   FormControl,
-  List,
   ListItem,
   ListItemText,
   TablePagination,
@@ -29,43 +28,31 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import IconButton from "@mui/material/IconButton";
 import { FixedSizeList as ListContainer } from "react-window";
 import {
+  fetchAllData,
+  fetchEmployees,
   addPerformanceData,
   updatePerformanceData,
   deletePerformanceData,
   addTrainingDetails,
   updateTrainingDetails,
   deleteTrainingDetails,
-  setLoading,
+  setSnackbar,
+  closeSnackbar,
 } from "../redux/performanceSlice";
+import { useNotificationContext } from "../components/NotificationContext";
 
 const AdminPerformanceManagementPage = () => {
   const dispatch = useDispatch();
-  const { performanceData, trainingData } = useSelector(
+  const { performanceData, trainingData, snackbar, employees } = useSelector(
     (state) => state.performance
   );
-
-  // Sample employee list
-  const employees = [
-    { id: 1, name: "Alice" },
-    { id: 2, name: "Bob" },
-    { id: 3, name: "Charlie" },
-    { id: 4, name: "David" },
-    { id: 5, name: "Eve" },
-    { id: 6, name: "Frank" },
-    { id: 7, name: "Grace" },
-    { id: 8, name: "Heidi" },
-    { id: 9, name: "Ivan" },
-    { id: 10, name: "Judy" },
-  ];
 
   const [selectedEmployee, setSelectedEmployee] = useState("");
   const [month, setMonth] = useState("");
   const [performance, setPerformance] = useState("");
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filteredEmployees, setFilteredEmployees] = useState(employees);
+  const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
@@ -83,22 +70,27 @@ const AdminPerformanceManagementPage = () => {
   const [trainingEditMode, setTrainingEditMode] = useState(false);
   const [selectedTrainingId, setSelectedTrainingId] = useState("");
 
-  useEffect(() => {
-    console.log("Training data updated:", trainingData);
-  }, [trainingData]);
+  const { addNotifications } = useNotificationContext();
 
   useEffect(() => {
-    setFilteredEmployees(
-      employees.filter(
-        (employee) =>
-          employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          employee.id.toString().includes(searchTerm)
-      )
-    );
-  }, [searchTerm]);
+    dispatch(fetchAllData());
+    dispatch(fetchEmployees()); // Fetch employees when the component mounts
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (Array.isArray(employees)) {
+      setFilteredEmployees(
+        employees.filter(
+          (employee) =>
+            employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            employee.id.toString().includes(searchTerm)
+        )
+      );
+    }
+  }, [searchTerm, employees]); // Add employees to the dependency array
 
   const handleSnackbarClose = () => {
-    setSnackbarOpen(false);
+    dispatch(closeSnackbar());
   };
 
   const formatMonth = (month) => {
@@ -106,64 +98,102 @@ const AdminPerformanceManagementPage = () => {
     return date.toLocaleString("default", { month: "long", year: "numeric" });
   };
 
-  const handleAddPerformance = () => {
+  const handleAddPerformance = async () => {
     if (!selectedEmployee || !month || !performance) {
-      setSnackbarMessage("All fields are required.");
-      setSnackbarOpen(true);
+      dispatch(
+        setSnackbar({ message: "All fields are required.", severity: "error" })
+      );
       return;
     }
 
     const newPerformanceData = {
-      employeeId: selectedEmployee,
+      empId: selectedEmployee,
       month: formatMonth(month),
       performance: Number(performance),
       target: 100,
     };
-    dispatch(addPerformanceData(newPerformanceData));
-    resetForm();
-    setSnackbarMessage("Performance data added successfully.");
-    setSnackbarOpen(true);
+
+    try {
+      await dispatch(addPerformanceData(newPerformanceData)).unwrap();
+      resetForm();
+      dispatch(
+        setSnackbar({
+          message: "Performance data added successfully.",
+          severity: "success",
+        })
+      );
+    } catch (error) {
+      dispatch(
+        setSnackbar({
+          message: "Failed to add performance data.",
+          severity: "error",
+        })
+      );
+    }
   };
 
-  const handleUpdatePerformance = () => {
+  const handleUpdatePerformance = async () => {
     if (!selectedEmployee || !month || !performance) {
-      setSnackbarMessage("All fields are required.");
-      setSnackbarOpen(true);
+      dispatch(
+        setSnackbar({ message: "All fields are required.", severity: "error" })
+      );
       return;
     }
 
     const updatedData = {
-      employeeId: selectedEmployee,
+      empId: selectedEmployee,
       month: formatMonth(month),
       performance: Number(performance),
       target: 100,
     };
-    dispatch(updatePerformanceData(updatedData));
-    resetForm();
-    setSnackbarMessage("Performance data updated successfully.");
-    setSnackbarOpen(true);
-    setEditMode(false);
+
+    try {
+      await dispatch(updatePerformanceData(updatedData)).unwrap();
+      resetForm();
+      dispatch(
+        setSnackbar({
+          message: "Performance data updated successfully.",
+          severity: "success",
+        })
+      );
+    } catch (error) {
+      dispatch(
+        setSnackbar({
+          message: "Failed to update performance data.",
+          severity: "error",
+        })
+      );
+    }
   };
 
   const handleEditPerformance = (data) => {
-    setSelectedEmployee(data.employeeId);
+    setSelectedEmployee(data.empId);
     setMonth(data.month);
     setPerformance(data.performance);
     setEditMode(true);
     setSearchTerm(
-      `${data.employeeId} - ${employees.find((emp) => emp.id === data.employeeId)?.name}`
+      `${data.empId} - ${employees.find((emp) => emp.id === data.empId)?.name}`
     );
     setDropdownOpen(false);
   };
 
-  const handleDeletePerformance = (employeeId, month) => {
-    const dataToDelete = {
-      employeeId,
-      month,
-    };
-    dispatch(deletePerformanceData(dataToDelete));
-    setSnackbarMessage("Performance data deleted successfully.");
-    setSnackbarOpen(true);
+  const handleDeletePerformance = async (empId, month) => {
+    try {
+      await dispatch(deletePerformanceData({ empId, month })).unwrap();
+      dispatch(
+        setSnackbar({
+          message: "Performance data deleted successfully.",
+          severity: "success",
+        })
+      );
+    } catch (error) {
+      dispatch(
+        setSnackbar({
+          message: "Failed to delete performance data.",
+          severity: "error",
+        })
+      );
+    }
   };
 
   const resetForm = () => {
@@ -175,10 +205,6 @@ const AdminPerformanceManagementPage = () => {
     setFilteredEmployees(employees);
     setDropdownOpen(false);
   };
-
-  useEffect(() => {
-    dispatch(setLoading(false));
-  }, [dispatch]);
 
   const Row = ({ index, style }) => (
     <ListItem
@@ -207,7 +233,7 @@ const AdminPerformanceManagementPage = () => {
     currentPage * rowsPerPage + rowsPerPage
   );
 
-  const handleAddTraining = () => {
+  const handleAddTraining = async () => {
     if (
       !trainingDate ||
       !trainingTime ||
@@ -217,38 +243,63 @@ const AdminPerformanceManagementPage = () => {
       !trainingInstructor ||
       !trainingLink
     ) {
-      setSnackbarMessage("All fields are required.");
-      setSnackbarOpen(true);
+      dispatch(
+        setSnackbar({ message: "All fields are required.", severity: "error" })
+      );
       return;
     }
-  
-    // Ensure trainingTime includes AM/PM
-    const formattedTime = convertTo12HourFormat(trainingTime); // Make sure trainingTime is a string like "10:00 AM"
-  
+
+    const formattedTime = convertTo12HourFormat(trainingTime);
+
     const newTrainingData = {
-      id: selectedTrainingId || Date.now(), // Use a unique ID for new training
+      id: selectedTrainingId || Date.now(),
       date: trainingDate,
-      time: formattedTime, // Store the formatted time
+      time: formattedTime,
       duration: trainingDuration,
       location: trainingLocation,
       description: trainingDescription,
       instructor: trainingInstructor,
       link: trainingLink,
     };
-  
-    if (trainingEditMode) {
-      dispatch(updateTrainingDetails(newTrainingData));
-      setSnackbarMessage("Training details updated successfully.");
-    } else {
-      dispatch(addTrainingDetails(newTrainingData));
-      setSnackbarMessage("Training details added successfully.");
+
+    try {
+      if (trainingEditMode) {
+        await dispatch(updateTrainingDetails(newTrainingData)).unwrap();
+        dispatch(
+          setSnackbar({
+            message: "Training details updated successfully.",
+            severity: "success",
+          })
+        );
+      } else {
+        await dispatch(addTrainingDetails(newTrainingData)).unwrap();
+        // Notify employees about the new training session
+        addNotifications([
+          {
+            type: "info", // You can change this to "success" or another type as needed
+            text: `A new training session has been added: ${trainingDescription} on ${trainingDate} at ${trainingTime}`,
+          },
+        ]);
+        dispatch(
+          setSnackbar({
+            message: "Training details added successfully.",
+            severity: "success",
+          })
+        );
+      }
+    } catch (error) {
+      dispatch(
+        setSnackbar({
+          message: "Failed to add/update training details.",
+          severity: "error",
+        })
+      );
+    } finally {
+      resetTrainingForm();
     }
-  
-    resetTrainingForm();
-    setSnackbarOpen(true);
   };
 
-  const handleEditTraining = (data) => {
+  const handleEditTraining = async (data) => {
     setTrainingDate(data.date);
     setTrainingTime(data.time);
     setTrainingDuration(data.duration);
@@ -260,10 +311,23 @@ const AdminPerformanceManagementPage = () => {
     setSelectedTrainingId(data.id);
   };
 
-  const handleDeleteTraining = (id) => {
-    dispatch(deleteTrainingDetails(id));
-    setSnackbarMessage("Training details deleted successfully.");
-    setSnackbarOpen(true);
+  const handleDeleteTraining = async (id) => {
+    try {
+      await dispatch(deleteTrainingDetails(id)).unwrap();
+      dispatch(
+        setSnackbar({
+          message: "Training details deleted successfully.",
+          severity: "success",
+        })
+      );
+    } catch (error) {
+      dispatch(
+        setSnackbar({
+          message: "Failed to delete training details.",
+          severity: "error",
+        })
+      );
+    }
   };
 
   const resetTrainingForm = () => {
@@ -282,27 +346,20 @@ const AdminPerformanceManagementPage = () => {
     const [hour, minute] = timeString.split(":").map(Number);
     const ampm = hour >= 12 ? "PM" : "AM";
     const formattedHour = hour % 12 || 12; // Convert 0 to 12 for midnight
-    const formattedMinute = minute.toString().padStart(2, '0'); // Ensure two-digit minute
+    const formattedMinute = minute.toString().padStart(2, "0"); // Ensure two-digit minute
     return `${formattedHour}:${formattedMinute} ${ampm}`;
   };
 
   const formatTime = (timeString) => {
-    // Ensure timeString is in a valid format
     if (!timeString) return "Invalid time";
-  
-    // Split the time string into hour, minute, and AM/PM
     const [time, ampm] = timeString.split(" ");
     const [hour, minute] = time.split(":").map(Number);
-  
-    // Validate hour and minute
     if (isNaN(hour) || isNaN(minute)) {
       console.error("Invalid time format:", timeString);
       return "Invalid time";
     }
-  
     let formattedHour = hour % 12 || 12; // Convert 0 to 12 for midnight
-    const formattedMinute = minute.toString().padStart(2, '0'); // Ensure two-digit minute
-  
+    const formattedMinute = minute.toString().padStart(2, "0"); // Ensure two-digit minute
     return `${formattedHour}:${formattedMinute} ${ampm}`;
   };
 
@@ -447,7 +504,7 @@ const AdminPerformanceManagementPage = () => {
               <TableBody>
                 {paginatedData.map((data) => (
                   <TableRow
-                    key={`${data.employeeId}-${data.month}`}
+                    key={`${data.empId}-${data.month}`}
                     sx={{
                       "&:hover": {
                         backgroundColor: "#f0f0f0", // Change background on hover
@@ -455,7 +512,9 @@ const AdminPerformanceManagementPage = () => {
                     }}
                   >
                     <TableCell>
-                      {`${data.employeeId} - ${employees.find((emp) => emp.id === data.employeeId)?.name}`}
+                      {`${data.empId} - ${
+                        employees.find((emp) => emp.id === data.empId)?.name
+                      }`}
                     </TableCell>
                     <TableCell>{formatMonth(data.month)}</TableCell>
                     <TableCell>{data.performance}</TableCell>
@@ -467,7 +526,7 @@ const AdminPerformanceManagementPage = () => {
                       <IconButton
                         color="error"
                         onClick={() =>
-                          handleDeletePerformance(data.employeeId, data.month)
+                          handleDeletePerformance(data.empId, data.month)
                         }
                       >
                         <DeleteIcon />
@@ -569,7 +628,6 @@ const AdminPerformanceManagementPage = () => {
             </CardContent>
           </Card>
 
-          {/* Separate Table Container below the form */}
           <TableContainer component={Paper} sx={{ marginTop: 2 }}>
             <Table>
               <TableHead>
@@ -640,7 +698,7 @@ const AdminPerformanceManagementPage = () => {
               rowsPerPageOptions={[5, 10, 25]}
               component="div"
               count={trainingData.length}
-              rowsPerPage={rowsPerPage} // Use the existing rowsPerPage state
+              rowsPerPage={rowsPerPage}
               page={trainingCurrentPage}
               onPageChange={(event, newPage) => setTrainingCurrentPage(newPage)}
               onRowsPerPageChange={(event) => {
@@ -653,16 +711,16 @@ const AdminPerformanceManagementPage = () => {
       )}
 
       <Snackbar
-        open={snackbarOpen}
+        open={snackbar.open}
         autoHideDuration={6000}
         onClose={handleSnackbarClose}
       >
         <Alert
           onClose={handleSnackbarClose}
-          severity="success"
+          severity={snackbar.severity}
           sx={{ width: "100%" }}
         >
-          {snackbarMessage}
+          {snackbar.message}
         </Alert>
       </Snackbar>
     </Box>

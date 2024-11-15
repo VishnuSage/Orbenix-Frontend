@@ -1,6 +1,15 @@
-import React, { useEffect, useState } from "react";
-import { useSelector, useDispatch } from "react-redux"; // Import Redux hooks
-import { logAttendance } from "../redux/attendanceLeaveSlice"; // Import the logAttendance action
+import React, { useEffect } from "react";
+import { useSelector, useDispatch } from "react-redux";
+import {
+  fetchEvents,
+  clockInThunk,
+  clockOutThunk,
+  setSnackbarMessage,
+  clearSnackbar,
+  addEvent,
+  updateElapsedTime,
+} from "../redux/timeTrackingSlice"; // Adjust the import path as necessary
+import { fetchAttendanceData } from "../redux/attendanceLeaveSlice";
 import {
   Box,
   Grid,
@@ -15,19 +24,18 @@ import {
   styled,
 } from "@mui/material";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import DoorFrontIcon from "@mui/icons-material/DoorFront"; // Import Door Front icon for Clock In
-import MeetingRoomIcon from "@mui/icons-material/MeetingRoom"; // Import Meeting Room icon for Clock Out
+import DoorFrontIcon from "@mui/icons-material/DoorFront";
+import MeetingRoomIcon from "@mui/icons-material/MeetingRoom";
 import InfoIcon from "@mui/icons-material/Info";
 import { Calendar, momentLocalizer } from "react-big-calendar";
 import moment from "moment";
-import { clockIn, clockOut, updateElapsedTime, setEvents } from "../redux/timeTrackingSlice"; // Import Redux actions
 import "react-big-calendar/lib/css/react-big-calendar.css";
 
 const localizer = momentLocalizer(moment);
 
 const SubHeading = styled(Typography)(({ theme }) => ({
   fontWeight: "600",
-  color: "#e0e0e0", // Light gray for contrast against dark background
+  color: "#e0e0e0",
   borderBottom: "2px solid transparent",
   background:
     "linear-gradient(90deg, rgba(128,0,128,1) 0%, rgba(0,0,0,1) 100%)",
@@ -39,60 +47,98 @@ const SubHeading = styled(Typography)(({ theme }) => ({
 }));
 
 const TimeTrackingPage = () => {
-  const dispatch = useDispatch(); // Initialize dispatch
-  const isClockedIn = useSelector((state) => state.timeTracking.isClockedIn); // Get clocked in state from Redux
-  const startTime = useSelector((state) => state.timeTracking.startTime); // Get start time from Redux
-  const elapsedTime = useSelector((state) => state.timeTracking.elapsedTime); // Get elapsed time from Redux
-  const events = useSelector((state) => state.timeTracking.events); // Get events from Redux
+  const dispatch = useDispatch();
+  const isClockedIn = useSelector((state) => state.timeTracking.isClockedIn);
+  const startTime = useSelector((state) => state.timeTracking.startTime);
+  const elapsedTime = useSelector((state) => state.timeTracking.elapsedTime);
+  const events = useSelector((state) => state.timeTracking.events);
+  const snackbarOpen = useSelector((state) => state.timeTracking.snackbarOpen);
+  const snackbarMessage = useSelector(
+    (state) => state.timeTracking.snackbarMessage
+  );
 
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const currentEmployeeId = useSelector((state) => state.auth.employee?.empId);
 
   useEffect(() => {
     let timer;
     if (isClockedIn) {
       timer = setInterval(() => {
-        dispatch(updateElapsedTime()); // Dispatch action to update elapsed time
+        dispatch(updateElapsedTime());
       }, 1000);
     }
     return () => clearInterval(timer);
   }, [dispatch, isClockedIn]);
 
-  const handleClockIn = () => {
-    dispatch(clockIn()); // Dispatch clockIn action
-    dispatch(logAttendance({ date: new Date().toISOString().split('T')[0], status: 'present' })); // Log attendance as present
-    setSnackbarMessage("Clocked In Successfully!");
-    setSnackbarOpen(true);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        await dispatch(fetchEvents());
+      } catch (error) {
+        console.error("Error fetching events:", error);
+        showSnackbar("Failed to fetch events. Please try again.");
+      }
+    };
+
+    fetchData();
+  }, [dispatch]);
+
+  const handleSnackbarClose = () => dispatch(clearSnackbar());
+
+  const showSnackbar = (message) => {
+    dispatch(setSnackbarMessage({ open: true, message }));
   };
-  
-  const handleClockOut = () => {
-    const endTime = Date.now();
-    const elapsedSeconds = Math.floor((endTime - startTime) / 1000);
-    
-    // Format elapsed time as HH:MM:SS
-    const hours = Math.floor(elapsedSeconds / 3600);
-    const minutes = Math.floor((elapsedSeconds % 3600) / 60);
-    const seconds = elapsedSeconds % 60;
-    const formattedTime = `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-    
-    // Add the worked hours to the events array
-    dispatch(setEvents([...events, {
-      title: formattedTime, // Use formatted elapsed time as the title
-      start: new Date(), // Use the current date
-      end: new Date(), // Use the current date
-    }])); // Dispatch action to set events
-    
-    dispatch(clockOut()); // Dispatch clockOut action
-    dispatch(logAttendance({ date: new Date().toISOString().split('T')[0], status: 'absent' })); // Log attendance as absent
-    setSnackbarMessage("Clocked Out Successfully!");
-    setSnackbarOpen(true);
+
+  const handleClockIn = async () => {
+    try {
+      const clockInTime = Date.now();
+      await dispatch(clockInThunk({ empId: currentEmployeeId, dispatch }));
+
+      // Add clock-in event
+      dispatch(
+        addEvent({
+          title: "Clock In",
+          start: new Date(clockInTime),
+          end: new Date(clockInTime),
+        })
+      );
+
+      showSnackbar("Clocked In Successfully!");
+      await dispatch(fetchAttendanceData(currentEmployeeId));
+    } catch (error) {
+      console.error("Error during clock in:", error);
+      showSnackbar("Failed to clock in. Please try again.");
+    }
+  };
+
+  const handleClockOut = async () => {
+    try {
+      const clockOutTime = Date.now();
+      await dispatch(clockOutThunk({ empId: currentEmployeeId, dispatch }));
+
+      // Add clock-out event
+      dispatch(
+        addEvent({
+          title: "Clock Out",
+          start: new Date(startTime),
+          end: new Date(clockOutTime),
+        })
+      );
+
+      showSnackbar("Clocked Out Successfully!");
+      await dispatch(fetchAttendanceData(currentEmployeeId));
+    } catch (error) {
+      console.error("Error during clock out:", error);
+      showSnackbar("Failed to clock out. Please try again.");
+    }
   };
 
   const formatElapsedTime = (seconds) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    return `${hours}h ${minutes}m ${secs}s `;
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs
+      .toString()
+      .padStart(2, "0")}`;
   };
 
   const eventStyleGetter = (event) => {
@@ -100,63 +146,31 @@ const TimeTrackingPage = () => {
       backgroundColor: event.title === "Absent" ? "red" : "green",
       borderRadius: "0px",
       opacity: 0.8,
-      color: "white", // Change text color to white for better visibility
+      color: "white",
       border: "0px",
       display: "block",
-      textAlign: "center", // Center the text
-      padding: "5px", // Add some padding
+      textAlign: "center",
+      padding: "5px",
     };
     return { style };
   };
 
-  useEffect(() => {
-    const currentWeek = moment().week();
-    const absentDays = [];
-    const existingEvents = [...events]; // Copy existing events to avoid modifying state directly
-  
-    for (let i = 1; i <= 7; i++) {
-      const day = moment().day(i).week(currentWeek).startOf('day');
-      if (day.isBefore(moment().startOf('day'))) {
-        let isAbsent = true;
-        existingEvents.forEach((event) => {
-          if (moment(event.start).isSame(day, "day")) {
-            isAbsent = false;
-          }
-        });
-        if (isAbsent && day.day() !== 0 && day.day() !== 6) { // Mark absent only for weekdays
-          absentDays.push({
-            title: "Absent",
-            start: day.toDate(),
-            end: day.toDate(),
-          });
-        }
-      }
-    }
-  
-    if (absentDays.length > 0) {
-      dispatch(setEvents([...events, ...absentDays])); // Dispatch action to set events with absent days
-    }
-  }, [dispatch, events]); // Add events to the dependency array
-
   const calculateTotalHoursWorkedThisMonth = () => {
     const currentMonth = moment().month();
     let totalSeconds = 0;
-    events.forEach((event) => {
+    (Array.isArray(events) ? events : []).forEach((event) => {
       if (moment(event.start).month() === currentMonth) {
         const timeParts = event.title.split(":");
-
         if (timeParts.length === 3) {
-          const hours = parseInt(timeParts[0], 10) || 0; // Default to 0 if NaN
-          const minutes = parseInt(timeParts[1], 10) || 0; // Default to 0 if NaN
-          const seconds = parseInt(timeParts[2], 10) || 0; // Default to 0 if NaN
-
+          const hours = parseInt(timeParts[0], 10) || 0;
+          const minutes = parseInt(timeParts[1], 10) || 0;
+          const seconds = parseInt(timeParts[2], 10) || 0;
           totalSeconds += hours * 3600 + minutes * 60 + seconds;
         } else {
           console.error(`Invalid time format: ${event.title}`);
         }
       }
     });
-
     return totalSeconds;
   };
 
@@ -164,9 +178,9 @@ const TimeTrackingPage = () => {
   const formattedTotalHoursWorkedThisMonth = formatElapsedTime(
     totalHoursWorkedThisMonth
   );
-
   const monthlyTarget = 160 * 3600; // 160 hours per month
-  const monthlyProgress = (totalHoursWorkedThisMonth / monthlyTarget) * 100;
+  const monthlyProgress =
+    monthlyTarget > 0 ? (totalHoursWorkedThisMonth / monthlyTarget) * 100 : 0;
 
   return (
     <Box sx={{ padding: 2 }}>
@@ -181,7 +195,7 @@ const TimeTrackingPage = () => {
             sx={{ margin: 1 }}
             onClick={handleClockIn}
             disabled={isClockedIn}
-            startIcon={<DoorFrontIcon />} // Use Door Front icon for Clock In
+            startIcon={<DoorFrontIcon />}
           >
             Clock In
           </Button>
@@ -190,19 +204,18 @@ const TimeTrackingPage = () => {
             color="error"
             onClick={handleClockOut}
             disabled={!isClockedIn}
-            startIcon={<MeetingRoomIcon />} // Use Meeting Room icon for Clock Out
+            startIcon={<MeetingRoomIcon />}
           >
             Clock Out
           </Button>
         </CardContent>
       </Card>
-
       <Card variant="outlined" sx={{ marginBottom: 2, height: 500 }}>
         <CardContent sx={{ height: "100%" }}>
           <Typography variant="h5">Work Hours Calendar</Typography>
           <Calendar
             localizer={localizer}
-            events={events}
+            events={Array.isArray(events) ? events : []}
             onSelectEvent={(event) => console.log(event)}
             onSelectSlot={(slotInfo) => console.log(slotInfo)}
             defaultView="month"
@@ -211,7 +224,6 @@ const TimeTrackingPage = () => {
           />
         </CardContent>
       </Card>
-
       <Grid item xs={12}>
         <Card
           sx={{
@@ -249,7 +261,7 @@ const TimeTrackingPage = () => {
             <Box sx={{ marginTop: 2 }}>
               <LinearProgress
                 variant="determinate"
-                value={monthlyProgress} // Assuming monthlyProgress is a percentage
+                value={monthlyProgress}
                 sx={{
                   height: 10,
                   borderRadius: 5,
@@ -261,11 +273,10 @@ const TimeTrackingPage = () => {
           </CardContent>
         </Card>
       </Grid>
-
       <Snackbar
         open={snackbarOpen}
         autoHideDuration={3000}
-        onClose={() => setSnackbarOpen(false)}
+        onClose={handleSnackbarClose}
         message={snackbarMessage}
       />
     </Box>

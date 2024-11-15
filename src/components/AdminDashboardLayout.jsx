@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
-import { Outlet } from "react-router-dom";
+import { useLocation, Link, Outlet } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { useNotificationContext } from "./NotificationContext.jsx";
 import ChangePassword from "./ChangePassword"; // Import ChangePassword component
@@ -12,7 +11,6 @@ import {
   Toolbar,
   Typography,
   InputBase,
-  Link,
   LinearProgress,
   Badge,
   IconButton,
@@ -24,6 +22,8 @@ import {
 import HomeIcon from "@mui/icons-material/Home";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import SettingsIcon from "@mui/icons-material/Settings";
+import ExitToAppIcon from "@mui/icons-material/ExitToApp"; // Import Logout Icon
+import DeleteIcon from "@mui/icons-material/Delete"; // Import Trash Icon
 import { styled } from "@mui/material/styles";
 import SearchIcon from "@mui/icons-material/Search";
 import AdminSidebar from "./AdminSidebar"; // Use AdminSidebar instead of Sidebar
@@ -34,23 +34,21 @@ const sidebarWidth = 240;
 
 const AdminDashboardLayout = () => {
   const profileData = useSelector((state) => state.profile);
-
-  const [user, setUser] = useState({
-    username: "adminUser ",
-    password: "adminPassword123", // Simulated current password
-  });
+  const {
+    newNotifications = [],
+    setNewNotifications,
+    clearAllNotifications,
+  } = useNotificationContext(); // Get notifications context
 
   const [openChangePassword, setOpenChangePassword] = useState(false);
   const [bgOpacity, setBgOpacity] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
-  const scrollThreshold = 200;
-
   const [currentPage, setCurrentPage] = useState("");
   const location = useLocation();
   const navigate = useNavigate();
-  const { newNotifications, setNewNotifications } = useNotificationContext();
   const [anchorEl, setAnchorEl] = useState(null);
   const [profileMenuAnchorEl, setProfileMenuAnchorEl] = useState(null);
+  const scrollThreshold = 200;
 
   useEffect(() => {
     const path = location.pathname.split("/").pop();
@@ -77,8 +75,7 @@ const AdminDashboardLayout = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 2000);
-
+    }, 2000); // Simulated loading time
     return () => clearTimeout(timer);
   }, []);
 
@@ -133,7 +130,6 @@ const AdminDashboardLayout = () => {
 
   const handleNotificationItemClick = (link, notificationId) => {
     navigate(link);
-
     setNewNotifications((prevNotifications) =>
       prevNotifications.filter((n) => n.id !== notificationId)
     );
@@ -146,6 +142,11 @@ const AdminDashboardLayout = () => {
 
   const handleCloseChangePassword = () => {
     setOpenChangePassword(false);
+  };
+
+  const handleLogout = () => {
+    // Implement logout functionality here if needed
+    navigate("/auth"); // Navigate to the login page after logout
   };
 
   return (
@@ -236,7 +237,9 @@ const AdminDashboardLayout = () => {
               color="inherit"
               sx={{ display: "flex", alignItems: "center" }}
             >
-              <HomeIcon />
+              <IconButton sx={{ color: "white" }}>
+                <HomeIcon />
+              </IconButton>
             </Link>
             {/* Add slash and current page name */}
             <Typography variant="h6" color="inherit" sx={{ marginLeft: 1 }}>
@@ -263,9 +266,8 @@ const AdminDashboardLayout = () => {
 
             {/* Notification and Settings Icons on the right */}
             <IconButton color="inherit" onClick={handleNotificationClick}>
-              {" "}
               <Badge badgeContent={newNotifications.length} color="error">
-                <NotificationsIcon />
+                <NotificationsIcon sx={{ color: "white" }} />
               </Badge>
             </IconButton>
 
@@ -292,14 +294,25 @@ const AdminDashboardLayout = () => {
                   </MenuItem>
                 ))
               )}
+              {/* Trash Icon Button to Clear All Notifications */}
+              {newNotifications.length > 0 && (
+                <MenuItem
+                  onClick={clearAllNotifications}
+                  sx={{ justifyContent: "center" }}
+                >
+                  <IconButton color="error">
+                    <DeleteIcon />
+                  </IconButton>
+                </MenuItem>
+              )}
             </Menu>
 
             <IconButton
               color="inherit"
-              sx={{ display: "flex", alignItems: "center", marginTop: "6px" }} // Adjust marginTop as needed
+              sx={{ display: "flex", alignItems: "center", marginTop: "6px" }}
             >
               <Link to="/admin/settings" color="inherit">
-                <SettingsIcon />
+                <SettingsIcon sx={{ color: "white" }} />
               </Link>
             </IconButton>
 
@@ -321,8 +334,8 @@ const AdminDashboardLayout = () => {
               <MenuItem onClick={handleChangePasswordClick}>
                 Change Password
               </MenuItem>
-              <MenuItem onClick={() => navigate("/admin/profile-settings")}>
-                View Profile
+              <MenuItem onClick={handleLogout}>
+                <ExitToAppIcon sx={{ marginRight: 1 }} /> Logout
               </MenuItem>
             </Menu>
           </Toolbar>
@@ -352,8 +365,7 @@ const AdminDashboardLayout = () => {
       >
         <ChangePassword
           onClose={handleCloseChangePassword}
-          user={user}
-          setUser={setUser}
+          user={profileData} // Pass the user data to ChangePassword
         />
       </Dialog>
     </Box>

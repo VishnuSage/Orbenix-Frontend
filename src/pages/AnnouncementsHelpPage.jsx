@@ -23,21 +23,37 @@ import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
 import { useNotificationContext } from "../components/NotificationContext.jsx"; // Import the context
 import {
+  fetchAnnouncements,
   selectAnnouncements,
   selectContactEmail,
+  selectAnnouncementsStatus,
 } from "../redux/announcementsSlice.js"; // Adjust the path as necessary
 
 const AnnouncementsHelpPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [selectedSort, setSelectedSort] = useState("newest"); // New state for sorting
-  const [loading, setLoading] = useState(true); // New loading state
+  const [selectedSort, setSelectedSort] = useState("newest");
 
-  const announcements = useSelector(selectAnnouncements); // Get announcements from Redux
-  const adminEmail = useSelector(selectContactEmail);
   const dispatch = useDispatch();
+  const announcements = useSelector(selectAnnouncements);
+  const adminEmail = useSelector(selectContactEmail);
+  const status = useSelector(selectAnnouncementsStatus);
+  const { addNotifications } = useNotificationContext();
 
   const categories = ["All", "Policy Updates", "Events", "Important Dates"];
+
+  // Fetch announcements from the Redux store
+  useEffect(() => {
+    if (status === "idle") {
+      dispatch(fetchAnnouncements());
+    }
+  }, [dispatch, status]);
+
+  useEffect(() => {
+    if (status === "succeeded") {
+      addNotifications(announcements); // Add notifications if needed
+    }
+  }, [announcements, status, addNotifications]);
 
   // Filtering and Sorting
   const filteredAnnouncements = announcements
@@ -53,35 +69,17 @@ const AnnouncementsHelpPage = () => {
     .sort((a, b) => {
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
-      if (selectedSort === "newest") {
-        return dateB - dateA; // Newest first
-      } else {
-        return dateA - dateB; // Oldest first
-      }
+      return selectedSort === "newest" ? dateB - dateA : dateA - dateB;
     });
 
   const handleClearSearch = () => {
     setSearchQuery("");
   };
 
-  const { addNotifications } = useNotificationContext();
-
-  useEffect(() => {
-    setLoading(true); // Set loading to true when fetching starts
-    const newAnnouncements = announcements.map((announcement) => ({
-      id: announcement.id,
-      text: announcement.text,
-      link: announcement.link,
-    }));
-
-    addNotifications(newAnnouncements);
-    setLoading(false); // Set loading to false after fetching
-  }, [announcements, addNotifications]);
-
   const handleSubmitQuestion = () => {
     if (adminEmail) {
       const mailtoLink = `mailto:${adminEmail}?subject=Question&body=Please enter your question here.`;
-      window.open(mailtoLink, "_blank"); // Open in a new tab
+      window.open(mailtoLink, "_blank");
     } else {
       alert("Admin email not set. Please contact your administrator.");
     }
@@ -100,13 +98,12 @@ const AnnouncementsHelpPage = () => {
         minHeight: "100vh",
       }}
     >
-      {loading && <LinearProgress sx={{ marginBottom: 2 }} />}
+      {status === "loading" && <LinearProgress sx={{ marginBottom: 2 }} />}
       <Typography variant="h5" gutterBottom sx={{ color: "#1976d2" }}>
         Company Announcements
       </Typography>
 
       <Box sx={{ marginBottom: 2, display: "flex", alignItems: "center" }}>
-        {/* Category Dropdown */}
         <FormControl variant="outlined" sx={{ minWidth: 150, mr: 2 }}>
           <InputLabel htmlFor="category-select">Category</InputLabel>
           <Select
@@ -123,7 +120,6 @@ const AnnouncementsHelpPage = () => {
           </Select>
         </FormControl>
 
-        {/* Sort Dropdown */}
         <FormControl variant="outlined" sx={{ minWidth: 120 }}>
           <InputLabel htmlFor="sort-select">Sort</InputLabel>
           <Select
@@ -138,7 +134,6 @@ const AnnouncementsHelpPage = () => {
         </FormControl>
       </Box>
 
-      {/* Enhanced Search Input */}
       <TextField
         variant="outlined"
         placeholder="Search announcements..."
@@ -167,7 +162,7 @@ const AnnouncementsHelpPage = () => {
           ),
           endAdornment: searchQuery && (
             <InputAdornment position="end">
-              <IconButton onClick={handleClearSearch} size="smAll">
+              <IconButton onClick={handleClearSearch} size="small">
                 <ClearIcon color="action" />
               </IconButton>
             </InputAdornment>
@@ -181,7 +176,7 @@ const AnnouncementsHelpPage = () => {
             <ListItem key={index} sx={{ padding: 1 }}>
               <ListItemIcon>
                 <AnnouncementIcon color="primary" />
-              </ListItemIcon>{" "}
+              </ListItemIcon>
               <Typography variant="body1">{announcement.text}</Typography>
             </ListItem>
           ))
@@ -192,7 +187,7 @@ const AnnouncementsHelpPage = () => {
 
       <Divider sx={{ margin: "16px 0" }} />
 
-      <Typography variant="h5" gutterBottom sx={{ color: "#1976d 2" }}>
+      <Typography variant="h5" gutterBottom sx={{ color: "#1976d2" }}>
         Help Section
       </Typography>
       <ListItem sx={{ padding: 1 }}>

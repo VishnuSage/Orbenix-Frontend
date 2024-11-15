@@ -44,7 +44,9 @@ import {
   selectPayroll,
   fetchAllPayrolls,
   fetchLoanRequests,
+  resetLoanForm,
 } from "../redux/payrollSlice";
+import { useNotificationContext } from "../components/NotificationContext";
 
 const PayrollPage = () => {
   const dispatch = useDispatch();
@@ -56,16 +58,18 @@ const PayrollPage = () => {
     toMonth,
     notification,
     payrollData,
-    empId, // Change to empId
-    name, // Change to name
+    empId,
+    name,
+    isLoadingPayrolls,
+    isLoadingLoanRequests,
   } = useSelector(selectPayroll);
+
   const [loanAmount, setLoanAmount] = useState("");
   const [repaymentDuration, setRepaymentDuration] = useState("");
   const [loanAmountError, setLoanAmountError] = useState("");
   const [repaymentDurationError, setRepaymentDurationError] = useState("");
   const [activeTab, setActiveTab] = useState(0);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); // Loading state for the entire page
 
   // Pagination state variables
   const [payrollHistoryPage, setPayrollHistoryPage] = useState(0);
@@ -73,20 +77,14 @@ const PayrollPage = () => {
   const [loanHistoryPage, setLoanHistoryPage] = useState(0);
   const [loanHistoryRowsPerPage, setLoanHistoryRowsPerPage] = useState(5);
 
-  const resetFilters = () => {
-    dispatch(setFromMonth(""));
-    dispatch(setToMonth(""));
-    dispatch(setFilteredHistory([]));
-  };
+  const { addNotifications } = useNotificationContext();
 
   useEffect(() => {
     dispatch(fetchAllPayrolls());
-    dispatch(fetchLoanRequests()); // Fetch loan requests on component mount
+    dispatch(fetchLoanRequests());
   }, [dispatch]);
 
   useEffect(() => {
-    setIsLoading(true);
-    console.log("Payroll Data:", payrollData); // Log the payroll data
     if (
       payrollData &&
       payrollData.allPayrolls &&
@@ -94,8 +92,13 @@ const PayrollPage = () => {
     ) {
       dispatch(setSelectedPayroll(payrollData.allPayrolls[0])); // Adjust this line if necessary
     }
-    setIsLoading(false);
   }, [dispatch, payrollData]);
+
+  const resetFilters = () => {
+    dispatch(setFromMonth(""));
+    dispatch(setToMonth(""));
+    dispatch(setFilteredHistory([]));
+  };
 
   const filterPayrollHistory = () => {
     if (!fromMonth || !toMonth) {
@@ -115,15 +118,12 @@ const PayrollPage = () => {
       return;
     }
 
-    setIsLoading(true);
-    // Filter 'allPayrolls' instead of the non-existent 'payrollHistory'
     const filtered = payrollData?.allPayrolls?.filter((payroll) => {
       const recordDate = new Date(payroll.month);
       return recordDate >= fromDate && recordDate <= toDate;
     });
 
     dispatch(setFilteredHistory(filtered));
-    setIsLoading(false);
   };
 
   const handleDownloadPayslip = (payrollDetails) => {
@@ -140,8 +140,6 @@ const PayrollPage = () => {
       month = "Unknown",
     } = payrollDetails;
 
-    // Use empId and name from props (or state)
-
     const totalDeductions = calculateTotalDeductions(deductionsBreakdown);
 
     try {
@@ -157,7 +155,7 @@ const PayrollPage = () => {
       doc.setFontSize(12);
       doc.setTextColor("#000");
       doc.text(`Employee ID: ${empId}`, 20, 40);
-      doc.text(` Employee Name: ${name}`, 20, 50);
+      doc.text(`Employee Name: ${name}`, 20, 50);
       doc.text(`Month: ${month}`, 20, 60);
 
       // Add a line separator
@@ -247,15 +245,34 @@ const PayrollPage = () => {
       addLoanRequest({
         amount: loanAmountValue,
         duration: repaymentDurationValue,
-        employeeId: empId, // Change to empId
+        empId: empId,
         requestedDate: new Date().toISOString(),
       })
-    );
-
-    const successMessage = "Loan request submitted successfully.";
-    dispatch(setNotification({ message: successMessage, type: "success" }));
-    setLoanAmount("");
-    setRepaymentDuration("");
+    )
+      .unwrap()
+      .then(() => {
+        addNotifications([
+          {
+            type: "info",
+            text: `New loan request submitted by ${name} for ₹${loanAmountValue}.`,
+          },
+        ]);
+        dispatch(
+          setNotification({
+            message: "Loan request submitted successfully.",
+            type: "success",
+          })
+        );
+        dispatch(resetLoanForm()); // Reset loan form after successful submission
+      })
+      .catch(() => {
+        dispatch(
+          setNotification({
+            message: "Failed to submit loan request.",
+            type: "error",
+          })
+        );
+      });
   };
 
   const handleCloseSnackbar = () => {
@@ -281,18 +298,26 @@ const PayrollPage = () => {
     setLoanHistoryPage(0);
   };
 
-  const employeeLoans = loanRequests
-    .filter((loan) => loan.employeeId === empId) // Use empId
-    .sort((a, b) => new Date(b.requestedDate) - new Date(a.requestedDate));
+  const employeeLoans = Array.isArray(loanRequests)
+    ? loanRequests.filter((loan) => loan.empId === empId)
+    : [];
 
-  // Pagination for employee loans
-  const displayedLoans = employeeLoans.slice(
+  // Sort employee loans by requestedDate descending
+  const sortedEmployeeLoans = employeeLoans
+    .slice()
+    .sort((a, b) => new Date(b.requestedDate) - new Date(a.requestedDate)); // Sort by requestedDate descending
+
+  const displayedLoans = sortedEmployeeLoans.slice(
     loanHistoryPage * loanHistoryRowsPerPage,
     loanHistoryPage * loanHistoryRowsPerPage + loanHistoryRowsPerPage
   );
 
   // For Payroll History
-  const displayedPayrollHistory = filteredHistory.slice(
+  const sortedPayrollHistory = filteredHistory
+    .slice()
+    .sort((a, b) => new Date(b.month) - new Date(a.month)); // Sort by month descending
+
+  const displayedPayrollHistory = sortedPayrollHistory.slice(
     payrollHistoryPage * payrollHistoryRowsPerPage,
     payrollHistoryPage * payrollHistoryRowsPerPage + payrollHistoryRowsPerPage
   );
@@ -316,7 +341,7 @@ const PayrollPage = () => {
         minHeight: "100vh",
       }}
     >
-      {isLoading ? (
+      {isLoadingPayrolls || isLoadingLoanRequests ? (
         <Box
           sx={{
             display: "flex",
@@ -606,9 +631,7 @@ const PayrollPage = () => {
                                 backgroundColor: "#4B0082",
                                 color: "white",
                               }}
-                              onClick={() =>
-                                handleDownloadPayslip(history.month)
-                              }
+                              onClick={() => handleDownloadPayslip(history)}
                               disabled={isGeneratingPDF}
                             >
                               {isGeneratingPDF && (
@@ -724,7 +747,7 @@ const PayrollPage = () => {
                           </TableCell>
                           <TableCell align="center">
                             {loan.status === "Approved" ? (
-                              <Chip label="Approved " color="success" />
+                              <Chip label="Approved" color="success" />
                             ) : loan.status === "Rejected" ? (
                               <Chip label="Rejected" color="error" />
                             ) : (

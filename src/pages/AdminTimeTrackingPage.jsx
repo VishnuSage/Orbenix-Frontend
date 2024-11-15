@@ -13,16 +13,20 @@ import {
   TablePagination,
   TextField,
   InputAdornment,
+  Typography,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search"; // Import the search icon
-import { fetchEmployees } from "../redux/employeeSlice";
+import { fetchEmployees } from "../redux/employeeSlice"; // Ensure this fetches from your API
+import {
+  selectDailyHours,
+  selectFilteredEmployees,
+} from "../redux/timeTrackingSlice"; // Import selectors from your slice
 
 const AdminTimeTrackingPage = () => {
   const dispatch = useDispatch();
 
   // Access employees and status from the Redux store
   const { employees, status } = useSelector((state) => state.employees);
-  const [dailyHours, setDailyHours] = useState({});
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const [searchQuery, setSearchQuery] = useState(""); // State for search query
@@ -30,48 +34,35 @@ const AdminTimeTrackingPage = () => {
   useEffect(() => {
     // Fetch employee data if not already loaded
     if (status === "idle") {
-      dispatch(fetchEmployees());
+      dispatch(fetchEmployees()); // This should now fetch from the API
     }
   }, [dispatch, status]);
 
-  useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
+  // Calculate daily hours using the selector
+  const dailyHours = useSelector((state) => selectDailyHours(state, employees));
 
-    const calculatedHours = {};
-    employees.forEach((employee) => {
-      let totalSeconds = 0;
-      let isActive = false; // Track if the employee is active
-
-      employee.events &&
-        employee.events.forEach((event) => {
-          const eventDate = event.start.split("T")[0];
-          if (eventDate === today) {
-            // Make sure event.title exists and is in the correct format
-            const timeParts = event.title && event.title.split(":");
-            if (timeParts && timeParts.length === 3) {
-              const hours = parseInt(timeParts[0], 10);
-              const minutes = parseInt(timeParts[1], 10);
-              const seconds = parseInt(timeParts[2], 10);
-              totalSeconds += hours * 3600 + minutes * 60 + seconds;
-            }
-            // Check if the employee is active based on the event
-            if (event.isClockedIn) {
-              isActive = true;
-            }
-          }
-        });
-      calculatedHours[employee.id] = {
-        totalSeconds,
-        isActive,
-      };
-    });
-
-    setDailyHours(calculatedHours);
-  }, [employees]);
+  // Filter employees based on search query using the selector
+  const filteredEmployees = useSelector((state) =>
+    selectFilteredEmployees(state, employees, searchQuery)
+  );
 
   // Handle loading state
   if (status === "loading") {
     return <CircularProgress />;
+  }
+
+  // Handle error state
+  if (status === "error") {
+    return (
+      <Typography color="error">
+        Error loading employees. Please try again later.
+      </Typography>
+    );
+  }
+
+  // Check for empty filtered employees
+  if (filteredEmployees.length === 0) {
+    return <Typography>No employees found.</Typography>;
   }
 
   // Function to render status indicator
@@ -102,23 +93,6 @@ const AdminTimeTrackingPage = () => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0); // Reset to the first page
   };
-
-  // Filter employees based on search query
-  const filteredEmployees = employees.filter((employee) => {
-    const lowercasedQuery = searchQuery.trim().toLowerCase(); // Trim and convert to lowercase
-    const employeeId = employee.id.toString(); // Ensure employee ID is a string
-    const employeeName = employee.name.toLowerCase(); // Convert employee name to lowercase
-
-    // Debugging output
-    console.log(
-      `Searching for: "${lowercasedQuery}" in Employee ID: "${employeeId}" and Name: "${employee.name}"`
-    );
-
-    return (
-      employeeName.includes(lowercasedQuery) || // Check employee name
-      employeeId.toLowerCase().includes(lowercasedQuery) // Check employee ID
-    );
-  });
 
   return (
     <Box
@@ -184,19 +158,21 @@ const AdminTimeTrackingPage = () => {
             {filteredEmployees
               .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
               .map((employee, index) => {
-                const { totalSeconds, isActive } = dailyHours[employee.id] || {
+                const { totalSeconds, isActive } = dailyHours[
+                  employee.empId
+                ] || {
                   totalSeconds: 0,
                   isActive: false,
                 };
                 return (
                   <TableRow
-                    key={employee.id}
+                    key={employee.empId}
                     hover
                     style={{
                       backgroundColor: index % 2 === 0 ? "#fafafa" : "#fff",
                     }}
                   >
-                    <TableCell>{employee.id}</TableCell>
+                    <TableCell>{employee.empId}</TableCell>
                     <TableCell>{employee.name}</TableCell>
                     <TableCell>{employee.position}</TableCell>
                     <TableCell>{employee.department}</TableCell>

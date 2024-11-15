@@ -26,18 +26,14 @@ import {
 } from "recharts";
 import InfoIcon from "@mui/icons-material/Info";
 import TrainingIcon from "@mui/icons-material/School";
-import {
-  setPerformanceData,
-  setTrainingDetails,
-  setLoading,
-} from "../redux/performanceSlice"; // Import actions
+import { fetchAllData, setLoading } from "../redux/performanceSlice"; // Import fetchAllData and setLoading
 
 // RadarChart Component
 const PerformanceChart = ({ data }) => (
   <Box display="flex" justifyContent="center">
     <RadarChart outerRadius={120} width={800} height={400} data={data}>
       <PolarGrid stroke="#e0e0e0" />
-      <PolarAngleAxis dataKey="month" /> {/* Changed from subject to month */}
+      <PolarAngleAxis dataKey="month" />
       <PolarRadiusAxis />
       <Radar
         name="Performance"
@@ -61,7 +57,7 @@ const PerformanceChart = ({ data }) => (
 PerformanceChart.propTypes = {
   data: PropTypes.arrayOf(
     PropTypes.shape({
-      month: PropTypes.string.isRequired, // Changed from subject to month
+      month: PropTypes.string.isRequired,
       performance: PropTypes.number.isRequired,
       target: PropTypes.number.isRequired,
     })
@@ -150,11 +146,9 @@ TrainingDetails.propTypes = {
 
 const PerformanceTrainingPage = () => {
   const dispatch = useDispatch();
-  const { performanceData, isLoading } = useSelector(
+  const { performanceData, trainingData, isLoading } = useSelector(
     (state) => state.performance
   );
-  const trainingData =
-    useSelector((state) => state.performance.trainingData) || [];
 
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
@@ -168,70 +162,15 @@ const PerformanceTrainingPage = () => {
 
   const { addNotifications } = useNotificationContext();
 
+  // Existing useEffect for fetching data
   useEffect(() => {
     const fetchData = async () => {
       dispatch(setLoading(true));
       try {
-        // Simulate API calls (replace with actual API calls later)
-        const performanceResponse = await new Promise((resolve) =>
-          setTimeout(
-            () =>
-              resolve([
-                { month: "October 2023", performance: 80, target: 100 },
-                { month: "November 2023", performance: 70, target: 100 },
-                { month: "December 2023", performance: 60, target: 100 },
-                { month: "January 2024", performance: 75, target: 100 },
-                { month: "February 2024", performance: 90, target: 100 },
-              ]), // Dummy performance data
-            1000 // Simulate delay
-          )
-        );
-        const trainingResponse = await new Promise((resolve) =>
-          setTimeout(
-            () =>
-              resolve([
-                {
-                  id: 1,
-                  date: "09-11-2024",
-                  time: "10:00 AM",
-                  duration: "2 hours",
-                  location: "Online (Zoom)",
-                  description:
-                    "This training session will cover the fundamentals of React.js, including components, state management, and hooks.",
-                  instructor: "John Doe - Senior React Developer",
-                  link: "some-link",
-                },
-                {
-                  id: 2,
-                  date: "15-11-2024",
-                  time: "02:00 PM",
-                  duration: "1 hour",
-                  location: "Room 101",
-                  description: "Advanced React patterns and best practices.",
-                  instructor: "Jane Smith - Lead React Developer",
-                  link: "some-link",
-                },
-              ]),
-            1000 // Simulate delay
-          )
-        );
-
-        dispatch(setPerformanceData(performanceResponse));
-        dispatch(setTrainingDetails(trainingResponse));
+        await dispatch(fetchAllData()); // Use fetchAllData
         dispatch(setLoading(false)); // Set loading to false after data is fetched
-
-        // --- Add Notification Logic ---
-        for (const training of trainingResponse) {
-          if (training.id) {
-            const newTrainingNotification = {
-              id: training.id,
-              text: `New training session scheduled: ${training.description}`,
-              link: `/training-details/${training.id}`,
-            };
-            addNotifications([newTrainingNotification]);
-          }
-        }
       } catch (error) {
+        console.error("Error fetching data:", error);
         setSnackbarMessage("Failed to load data.");
         setSnackbarOpen(true); // Open snackbar on error
         dispatch(setLoading(false)); // Set loading to false on error
@@ -239,7 +178,25 @@ const PerformanceTrainingPage = () => {
     };
 
     fetchData();
-  }, [dispatch, addNotifications]);
+  }, [dispatch]); // Removed addNotifications and trainingData from this effect
+
+  // New useEffect for handling notifications
+  useEffect(() => {
+    const notifiedIds = new Set(); // To keep track of notified training IDs
+    if (trainingData.length > 0) {
+      for (const training of trainingData) {
+        if (training.id && !notifiedIds.has(training.id)) {
+          notifiedIds.add(training.id); // Mark this training as notified
+          const newTrainingNotification = {
+            id: training.id,
+            text: `New training session scheduled: ${training.description}`,
+            link: `/training-details/${training.id}`,
+          };
+          addNotifications([newTrainingNotification]);
+        }
+      }
+    }
+  }, [trainingData, addNotifications]);
 
   if (isLoading) {
     return (
@@ -251,48 +208,45 @@ const PerformanceTrainingPage = () => {
 
   const findUpcomingTraining = (trainingData) => {
     if (trainingData.length === 0) return null;
-  
+
     const now = new Date();
-    console.log("Current Date:", now);
     let upcomingTraining = null;
     let closestTimeDifference = Infinity;
-  
+
     for (const training of trainingData) {
-      // Split the date string into components
       const [day, month, year] = training.date.split("-").map(Number);
-      
-      // Extract time and AM/PM
       const timeParts = training.time.split(" ");
       const [hour, minute] = timeParts[0].split(":").map(Number);
       const amPm = timeParts[1];
-  
-      // Convert hour to 24-hour format
+
       let adjustedHour = hour;
       if (amPm === "PM" && hour !== 12) {
-        adjustedHour += 12; // Convert PM hour to 24-hour format
+        adjustedHour += 12;
       } else if (amPm === "AM" && hour === 12) {
-        adjustedHour = 0; // Midnight case
+        adjustedHour = 0;
       }
-  
-      // Create a Date object, adjusting for month being 0-indexed in JavaScript
-      const trainingDateTime = new Date(year, month - 1, day, adjustedHour, minute);
-      console.log("Training DateTime:", trainingDateTime);
-  
-      // Check if the trainingDateTime is valid
+
+      const trainingDateTime = new Date(
+        year,
+        month - 1,
+        day,
+        adjustedHour,
+        minute
+      );
+
       if (isNaN(trainingDateTime.getTime())) {
         console.error("Invalid Date for training:", training.date);
-        continue; // Skip this training if the date is invalid
+        continue;
       }
-  
+
       const timeDifference = trainingDateTime - now;
-  
-      // Only consider future training sessions
+
       if (timeDifference > 0 && timeDifference < closestTimeDifference) {
         closestTimeDifference = timeDifference;
         upcomingTraining = training;
       }
     }
-  
+
     return upcomingTraining;
   };
 
@@ -302,9 +256,10 @@ const PerformanceTrainingPage = () => {
     (acc, curr) => acc + curr.performance,
     0
   );
-  const averagePerformance = (
-    totalPerformance / performanceData.length
-  ).toFixed(2);
+  const averagePerformance =
+    performanceData.length > 0
+      ? (totalPerformance / performanceData.length).toFixed(2)
+      : 0;
   const percentageChange =
     performanceData.length >= 2
       ? ((performanceData[performanceData.length - 1].performance -

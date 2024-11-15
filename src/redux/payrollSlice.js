@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import axios from "axios";
+import allApi from "../services/allApi"; // Import the allApi file
 
 const initialState = {
   selectedPayroll: null,
@@ -9,6 +9,8 @@ const initialState = {
   activeTab: 0,
   loanAmount: "",
   repaymentDuration: "",
+  loanAmountError: "",
+  repaymentDurationError: "",
   loanRequests: [],
   notification: { message: "", type: "" },
   empId: "", // Employee ID for the logged-in user
@@ -18,7 +20,8 @@ const initialState = {
     allPayrolls: [],
     employeePayroll: null, // To store specific employee payroll data
   },
-  isLoading: false, // Loading state for API calls
+  isLoadingPayrolls: false, // Loading state for payrolls
+  isLoadingLoanRequests: false, // Loading state for loan requests
 };
 
 // Async thunk to fetch payrolls based on user role
@@ -28,10 +31,8 @@ export const fetchAllPayrolls = createAsyncThunk(
     const state = getState();
     const userRole = state.auth.userRole; // Assuming you have userRole in your auth slice
 
-    const endpoint =
-      userRole === "admin" ? `/api/payrolls` : `/api/payrolls?empId=${empId}`;
-    const response = await axios.get(endpoint);
-    return response.data; // Return the fetched payrolls
+    const response = await allApi.fetchAllPayrolls(empId, userRole);
+    return response; // Return the fetched payrolls
   }
 );
 
@@ -39,8 +40,8 @@ export const fetchAllPayrolls = createAsyncThunk(
 export const fetchEmployeePayroll = createAsyncThunk(
   "payroll/fetchEmployeePayroll",
   async (empId) => {
-    const response = await axios.get(`/api/employees/${empId}/payroll`);
-    return response.data; // Return the fetched employee payroll data
+    const response = await allApi.fetchEmployeePayroll(empId);
+    return response; // Return the fetched employee payroll data
   }
 );
 
@@ -48,8 +49,8 @@ export const fetchEmployeePayroll = createAsyncThunk(
 export const fetchLoanRequests = createAsyncThunk(
   "payroll/fetchLoanRequests",
   async (empId) => {
-    const response = await axios.get(`/api/loanRequests?empId=${empId}`);
-    return response.data; // Return the fetched loan requests
+    const response = await allApi.fetchLoanRequests(empId);
+    return response; // Return the fetched loan requests
   }
 );
 
@@ -99,6 +100,18 @@ const payrollSlice = createSlice({
     setRepaymentDuration(state, action) {
       state.repaymentDuration = action.payload;
     },
+    setLoanAmountError(state, action) {
+      state.loanAmountError = action.payload;
+    },
+    setRepaymentDurationError(state, action) {
+      state.repaymentDurationError = action.payload;
+    },
+    resetLoanForm(state) {
+      state.loanAmount = "";
+      state.repaymentDuration = "";
+      state.loanAmountError = "";
+      state.repaymentDurationError = "";
+    },
     setNotification(state, action) {
       state.notification = action.payload;
     },
@@ -133,28 +146,102 @@ const payrollSlice = createSlice({
         }
       }
     },
+    addPayrollData(state, action) {
+      const newPayroll = action.payload; // Expecting the new payroll data in the payload
+      state.payrollData.allPayrolls.push(newPayroll); // Add the new payroll to the list
+    },
+    deletePayrollData(state, action) {
+      const idToDelete = action.payload; // Expecting the ID of the payroll to delete
+      state.payrollData.allPayrolls = state.payrollData.allPayrolls.filter(
+        (payroll) => payroll.id !== idToDelete
+      ); // Remove the payroll from the list
+    },
+    updatePayrollData(state, action) {
+      const updatedPayroll = action.payload; // Expecting the updated payroll data in the payload
+      const index = state.payrollData.allPayrolls.findIndex(
+        (payroll) => payroll.id === updatedPayroll.id
+      );
+
+      if (index !== -1) {
+        state.payrollData.allPayrolls[index] = updatedPayroll; // Update the payroll in the list
+      }
+    },
+    filterPayrollData(state, action) {
+      const { fromMonth, toMonth } = action.payload;
+
+      if (!Array.isArray(state.payrollData.allPayrolls)) {
+        console.error(
+          "allPayrolls is not an array:",
+          state.payrollData.allPayrolls
+        );
+        return; // Exit if it's not an array
+      }
+
+      state.filteredHistory = state.payrollData.allPayrolls.filter(
+        (payroll) => {
+          const payrollDate = new Date(payroll.month);
+          return (
+            payrollDate >= new Date(fromMonth) &&
+            payrollDate <= new Date(toMonth)
+          );
+        }
+      );
+    },
+    searchPayrollData(state, action) {
+      const searchQuery = action.payload;
+      // Implement search logic...
+      state.filteredHistory = state.payrollData.allPayrolls.filter(
+        (payroll) =>
+          payroll.empId.toString().includes(searchQuery) ||
+          payroll.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    },
   },
   extraReducers: (builder) => {
     builder
       .addCase(fetchAllPayrolls.pending, (state) => {
-        state.isLoading = true; // Set loading state to true
+        state.isLoadingPayrolls = true; // Set loading state to true
       })
       .addCase(fetchAllPayrolls.fulfilled, (state, action) => {
-        state.payrollData.allPayrolls = action.payload; // Store fetched payrolls
-        state.isLoading = false; // Set loading state to false
+        if (Array.isArray(action.payload)) {
+          state.payrollData.allPayrolls = action.payload; // Store fetched payrolls
+        } else {
+          console.error("Fetched payrolls are not an array:", action.payload);
+          state.payrollData.allPayrolls = []; // Reset to empty array if not an array
+        }
+        state.isLoadingPayrolls = false; // Set loading state to false
       })
       .addCase(fetchAllPayrolls.rejected, (state) => {
         state.notification = {
           message: "Failed to fetch payrolls", // Set error message
           type: "error",
         };
-        state.isLoading = false; // Set loading state to false
+        state.isLoadingPayrolls = false; // Set loading state to false
       })
       .addCase(fetchEmployeePayroll.fulfilled, (state, action) => {
         state.payrollData.employeePayroll = action.payload; // Store fetched employee payroll data
       })
+      .addCase(fetchLoanRequests.pending, (state) => {
+        state.isLoadingLoanRequests = true; // Set loading state to true
+      })
       .addCase(fetchLoanRequests.fulfilled, (state, action) => {
-        state.loanRequests = action.payload; // Store fetched loan requests
+        if (Array.isArray(action.payload)) {
+          state.loanRequests = action.payload; // Store fetched loan requests
+        } else {
+          console.error(
+            "Fetched loan requests are not an array:",
+            action.payload
+          );
+          state.loanRequests = []; // Reset to empty array if not an array
+        }
+        state.isLoadingLoanRequests = false; // Set loading state to false
+      })
+      .addCase(fetchLoanRequests.rejected, (state) => {
+        state.notification = {
+          message: "Failed to fetch loan requests", // Set error message
+          type: "error",
+        };
+        state.isLoadingLoanRequests = false; // Set loading state to false
       });
   },
 });
@@ -168,13 +255,22 @@ export const {
   setActiveTab,
   setLoanAmount,
   setRepaymentDuration,
+  setLoanAmountError,
+  setRepaymentDurationError,
+  resetLoanForm,
   setNotification,
   addLoanRequest,
   updateLoanRequestStatus,
+  addPayrollData,
+  deletePayrollData,
+  updatePayrollData,
+  filterPayrollData,
+  searchPayrollData,
 } = payrollSlice.actions;
 
 export const selectPayroll = (state) => state.payroll;
-export const selectLoanRequests = (state) => state.payroll.loanRequests;
-export const selectEmployeePayroll = (state) => state.payroll.payrollData.employeePayroll;
+export const selectLoanRequests = (state) => state.payroll.loanRequests || [];
+export const selectEmployeePayroll = (state) =>
+  state.payroll.payrollData.employeePayroll;
 
 export default payrollSlice.reducer;
