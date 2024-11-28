@@ -28,11 +28,13 @@ import { styled } from "@mui/material/styles";
 import SearchIcon from "@mui/icons-material/Search";
 import AdminSidebar from "./AdminSidebar"; // Use AdminSidebar instead of Sidebar
 import backgroundImage from "../assets/login-bg.jpg";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
+import { logoutEmployee } from "../redux/authSlice";
 
 const sidebarWidth = 240;
 
 const AdminDashboardLayout = () => {
+  const dispatch = useDispatch();
   const profileData = useSelector((state) => state.profile);
   const {
     newNotifications = [],
@@ -145,7 +147,7 @@ const AdminDashboardLayout = () => {
   };
 
   const handleLogout = () => {
-    // Implement logout functionality here if needed
+    dispatch(logoutEmployee()); // Dispatch the logout action
     navigate("/auth"); // Navigate to the login page after logout
   };
 

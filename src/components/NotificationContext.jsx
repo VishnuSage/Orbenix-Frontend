@@ -1,4 +1,9 @@
-import React, { createContext, useContext, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useCallback,
+} from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   addNotification,
@@ -14,31 +19,36 @@ export const NotificationProvider = ({ children }) => {
     (state) => state.notifications.notifications
   ); // Get notifications from state
 
-  const addNotifications = (notifications) => {
-    notifications.forEach((notification) => {
-      const { type, text } = notification; // Use 'text' instead of 'message' for consistency
-      try {
-        dispatch(addNotification({ type, text })); // Dispatch with correct structure
-      } catch (error) {
-        console.error("Failed to add notification:", error);
-      }
-    });
-  };
+  const addNotifications = useCallback(
+    (notifications) => {
+      notifications.forEach((notification) => {
+        const { type, text } = notification; // Use 'text' instead of 'message' for consistency
+        try {
+          dispatch(addNotification({ type, text })); // Dispatch with correct structure
+        } catch (error) {
+          console.error("Failed to add notification:", error);
+        }
+      });
+    },
+    [dispatch]
+  ); // Add dispatch as a dependency
 
-  const clearAllNotifications = () => {
+  const clearAllNotifications = useCallback(() => {
     try {
       dispatch(clearNotifications());
     } catch (error) {
       console.error("Failed to clear notifications:", error);
     }
-  };
+  }, [dispatch]); // Add dispatch as a dependency
 
   useEffect(() => {
     // Fetch notifications from Redux thunk
     const fetchAndAddNotifications = async () => {
       try {
-        const notifications = await dispatch(fetchNotifications()).unwrap();
-        addNotifications(notifications);
+        const fetchedNotifications = await dispatch(
+          fetchNotifications()
+        ).unwrap();
+        addNotifications(fetchedNotifications);
       } catch (error) {
         console.error("Failed to fetch notifications:", error);
       }
@@ -52,7 +62,7 @@ export const NotificationProvider = ({ children }) => {
     }, 6000); // Clear notifications after 6 seconds
 
     return () => clearTimeout(timer); // Cleanup on unmount
-  }, [dispatch]); // Run only once on mount
+  }, [dispatch, addNotifications, clearAllNotifications]); // Add memoized functions as dependencies
 
   return (
     <NotificationContext.Provider

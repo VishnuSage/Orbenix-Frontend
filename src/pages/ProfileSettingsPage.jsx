@@ -21,13 +21,16 @@ import {
   fetchEmployeeProfile,
   updateEmployeeProfile,
   setProfileImage,
+  uploadEmployeeImage,
 } from "../redux/profileSlice"; // Import actions
+import moment from "moment";
 
 const ProfileImage = ({ imageSrc, onImageChange, editable }) => {
   const fileInputRef = useRef(null);
 
   const handleIconClick = () => {
     if (editable) {
+      console.log("File input clicked");
       fileInputRef.current.click(); // Trigger the file input click
     }
   };
@@ -53,6 +56,7 @@ const ProfileImage = ({ imageSrc, onImageChange, editable }) => {
             ref={fileInputRef}
             onChange={onImageChange}
             style={{ display: "none" }} // Hide the file input
+            accept="image/png, image/jpeg, image/jpg"
           />
           <IconButton
             aria-label="edit"
@@ -78,10 +82,10 @@ const ProfileImage = ({ imageSrc, onImageChange, editable }) => {
   );
 };
 
-const ProfileSettingsPage = ({ empId }) => {
-  // Accept empId as a prop
+const ProfileSettingsPage = () => {
   const dispatch = useDispatch();
-  const profileData = useSelector((state) => state.profile);
+  const profileData = useSelector((state) => state.profile); // Adjusted to directly access profile data
+  const loading = useSelector((state) => state.profile.loading); // Access loading state
 
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState(profileData);
@@ -89,14 +93,17 @@ const ProfileSettingsPage = ({ empId }) => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false); // Loading state
 
+  const empId = useSelector((state) => state.auth.empId); // Access empId from the Redux state
+
   // Fetch employee profile data when the component mounts
   useEffect(() => {
     dispatch(fetchEmployeeProfile(empId)); // Fetch profile data by employee ID
   }, [dispatch, empId]);
 
-  // Update formData when profileData changes
   useEffect(() => {
-    setFormData(profileData);
+    if (profileData) {
+      setFormData(profileData); // Populate formData with fetched profileData
+    }
   }, [profileData]);
 
   const handleInputChange = (e) => {
@@ -104,17 +111,36 @@ const ProfileSettingsPage = ({ empId }) => {
     setFormData({ ...formData, [name]: value });
   };
 
+  // ... (rest of your code)
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        dispatch(setProfileImage(reader.result)); // Dispatch action to set image
-        setFormData({ ...formData, profileImage: reader.result });
-      };
-      reader.readAsDataURL(file);
+      setIsLoading(true); // Start loading
+      const formData = new FormData();
+      formData.append("image", file);
+
+      dispatch(uploadEmployeeImage({ empId, formData }))
+        .then((response) => {
+          console.log("Upload response:", response);
+          // Extract the image URL based on your backend response structure
+          const imageUrl = response.data?.imageUrl || response.data; // Example: Assumes imageUrl or the entire response
+          setFormData({ ...formData, profileImage: imageUrl });
+          dispatch(setProfileImage(imageUrl));
+          dispatch(fetchEmployeeProfile(empId));
+        })
+        .catch((error) => {
+          console.error("Upload failed:", error);
+          setError("Failed to upload image.");
+          setSnackbarOpen(true);
+        })
+        .finally(() => {
+          setIsLoading(false); // End loading
+        });
     }
   };
+
+  // ... (rest of your code)
 
   const handleEditClick = () => {
     setEditMode(true);
@@ -129,7 +155,14 @@ const ProfileSettingsPage = ({ empId }) => {
       !formData.name ||
       !formData.email ||
       !formData.phone ||
-      !formData.address
+      !formData.address ||
+      !formData.position ||
+      !formData.department ||
+      !formData.manager ||
+      !formData.startDate ||
+      !formData.emergencyContactName ||
+      !formData.emergencyContactRelationship ||
+      !formData.emergencyContactPhone
     ) {
       setError("All fields are required.");
       setSnackbarOpen(true);
@@ -137,7 +170,7 @@ const ProfileSettingsPage = ({ empId }) => {
     }
 
     setIsLoading(true); // Start loading
-    dispatch(updateEmployeeProfile(formData)) // Dispatch action to update profile
+    dispatch(updateEmployeeProfile({ profileData: formData, empId })) // Dispatch action to update profile
       .then(() => {
         setEditMode(false);
         setError("");
@@ -175,15 +208,15 @@ const ProfileSettingsPage = ({ empId }) => {
               <Grid container spacing={2}>
                 <Grid item xs={12}>
                   <ProfileImage
-                    imageSrc={profileData.profileImage}
-                    onImageChange={() => {}}
-                    editable={false}
+                    imageSrc={formData.profileImage}
+                    onImageChange={handleFileChange} // Pass the file change handler
+                    editable={true} // Make it editable
                   />
                 </Grid>
                 <Grid item xs={12}>
                   <Typography>{profileData.name}</Typography>
                   <Typography>Employee ID: {profileData.empId}</Typography>
-                  <Typography>{profileData.jobTitle}</Typography>
+                  <Typography>{profileData.position}</Typography>
                   <Typography>Department: {profileData.department}</Typography>
                   <Typography>Manager: {profileData.manager}</Typography>
                 </Grid>
@@ -200,7 +233,6 @@ const ProfileSettingsPage = ({ empId }) => {
               borderRadius: 2,
               boxShadow: 2,
               position: "relative",
-              height: "320px",
               display: "flex",
               flexDirection: "column",
             }}
@@ -307,6 +339,55 @@ const ProfileSettingsPage = ({ empId }) => {
                       </Typography>
                     </Grid>
                   </Grid>
+                  <Divider sx={{ marginY: 1 }} />
+
+                  {/* New Fields Added Here */}
+                  <Grid container spacing={1}>
+                    <Grid item xs={6}>
+                      <Typography align="left">Position</Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography align="left" sx={{ marginLeft: 2 }}>
+                        {profileData.position}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                  <Divider sx={{ marginY: 1 }} />
+
+                  <Grid container spacing={1}>
+                    <Grid item xs={6}>
+                      <Typography align="left">Department</Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography align="left" sx={{ marginLeft: 2 }}>
+                        {profileData.department}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                  <Divider sx={{ marginY: 1 }} />
+
+                  <Grid container spacing={1}>
+                    <Grid item xs={6}>
+                      <Typography align="left">Manager</Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography align="left" sx={{ marginLeft: 2 }}>
+                        {profileData.manager}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                  <Divider sx={{ marginY: 1 }} />
+
+                  <Grid container spacing={1}>
+                    <Grid item xs={6}>
+                      <Typography align="left">Start Date</Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography align="left" sx={{ marginLeft: 2 }}>
+                        {moment(profileData.startDate).format("DD-MM-YYYY")}
+                      </Typography>
+                    </Grid>
+                  </Grid>
                 </Grid>
               </Grid>
             </CardContent>
@@ -355,14 +436,15 @@ const ProfileSettingsPage = ({ empId }) => {
               Edit Profile
             </Typography>
             <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <ProfileImage
-                  imageSrc={formData.profileImage}
-                  onImageChange={handleFileChange}
-                  editable={true}
-                />
-              </Grid>
               <Grid item xs={12} md={6}>
+                <TextField
+                  label="Employee ID"
+                  name="empId"
+                  value={formData.empId}
+                  InputProps={{ readOnly: true }} // Make read-only
+                  fullWidth
+                  margin="normal"
+                />
                 <TextField
                   label="Name"
                   name="name"
@@ -375,7 +457,7 @@ const ProfileSettingsPage = ({ empId }) => {
                   label="Email"
                   name="email"
                   value={formData.email}
-                  onChange={handleInputChange}
+                  InputProps={{ readOnly: true }} // Make read-only
                   fullWidth
                   margin="normal"
                 />
@@ -383,7 +465,7 @@ const ProfileSettingsPage = ({ empId }) => {
                   label="Phone"
                   name="phone"
                   value={formData.phone}
-                  onChange={handleInputChange}
+                  InputProps={{ readOnly: true }} // Make read-only
                   fullWidth
                   margin="normal"
                 />
@@ -394,6 +476,18 @@ const ProfileSettingsPage = ({ empId }) => {
                   onChange={handleInputChange}
                   fullWidth
                   margin="normal"
+                />
+                <TextField
+                  label="Start Date"
+                  name="startDate"
+                  type="text"
+                  value={moment(formData.startDate).format("DD-MM-YYYY")}
+                  InputProps={{ readOnly: true }} // Make read-only
+                  fullWidth
+                  margin="normal"
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
@@ -418,6 +512,30 @@ const ProfileSettingsPage = ({ empId }) => {
                   name="emergencyContactPhone"
                   value={formData.emergencyContactPhone}
                   onChange={handleInputChange}
+                  fullWidth
+                  margin="normal"
+                />
+                <TextField
+                  label="Position"
+                  name="position"
+                  value={formData.position}
+                  InputProps={{ readOnly: true }} // Make read-only
+                  fullWidth
+                  margin="normal"
+                />
+                <TextField
+                  label="Department"
+                  name="department"
+                  value={formData.department}
+                  InputProps={{ readOnly: true }} // Make read-only
+                  fullWidth
+                  margin="normal"
+                />
+                <TextField
+                  label="Manager"
+                  name="manager"
+                  value={formData.manager}
+                  InputProps={{ readOnly: true }} // Make read-only
                   fullWidth
                   margin="normal"
                 />

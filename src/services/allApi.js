@@ -23,28 +23,38 @@ export const fetchEmployeeById = async (empId) => {
   return await commonApi("GET", `/api/employees/${empId}`);
 };
 
-export const updateEmployeeProfile = async (profileData) => {
-  return await commonApi(
-    "PUT",
-    `/api/employees/${profileData.empId}`,
-    profileData
-  );
-};
-
 // -----------------------------------
 // Authentication APIs
 // -----------------------------------
+
 export const login = async (credentials) => {
   const { emailOrPhone, password } = credentials;
-  return await commonApi("POST", "/api/auth/login", { emailOrPhone, password });
-};
 
-export const sendOtp = async (email) => {
-  return await commonApi("POST", "/api/auth/send-otp", { email });
-};
+  try {
+    const response = await commonApi("POST", "/api/auth/login", {
+      emailOrPhone,
+      password,
+    });
 
-export const verifyOtp = async ({ email, otp }) => {
-  return await commonApi("POST", "/api/auth/verify-otp", { email, otp });
+    console.log("API Response:", response); // Log the entire response
+
+    if (!response.data || !response.data.token || !response.data.user) {
+      throw new Error("Invalid response structure");
+    }
+
+    const token = response.data.token;
+    const user = response.data.user;
+
+    return {
+      empId: user.empId,
+      roles: user.roles,
+      token: token,
+      user: user,
+    };
+  } catch (error) {
+    console.error("Login error:", error);
+    throw new Error(error.response?.data?.message || "Login failed");
+  }
 };
 
 export const registerUser = async ({ emailOrPhone, password }) => {
@@ -54,12 +64,27 @@ export const registerUser = async ({ emailOrPhone, password }) => {
   });
 };
 
-export const fetchEmployeeByEmailOrPhone = async (identifier) => {
-  return await commonApi("GET", `/api/employees?identifier=${identifier}`);
+export const fetchEmployeeByEmailOrPhone = async (emailOrPhone) => {
+  return await commonApi(
+    "GET",
+    `/api/employees?emailOrPhone=${encodeURIComponent(emailOrPhone)}`
+  );
 };
 
 export const fetchUserRoles = async (empId) => {
   return await commonApi("GET", `/api/employees/${empId}/roles`);
+};
+
+export const resetPassword = async ({ emailOrPhone, newPassword }) => {
+  try {
+    const response = await commonApi("POST", "/api/auth/password-reset", {
+      emailOrPhone,
+      newPassword,
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || "Password reset failed");
+  }
 };
 
 export const updatePassword = async ({
@@ -67,11 +92,18 @@ export const updatePassword = async ({
   currentPassword,
   newPassword,
 }) => {
-  return await commonApi("POST", "/api/auth/updatePassword", {
-    empId,
-    currentPassword,
-    newPassword,
-  });
+  try {
+    const response = await commonApi("POST", "/api/auth/update-password", {
+      empId,
+      currentPassword,
+      newPassword,
+    });
+    return response;
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.message || "Failed to update password"
+    );
+  }
 };
 
 // -----------------------------------
@@ -79,12 +111,34 @@ export const updatePassword = async ({
 // -----------------------------------
 export const fetchAllPayrolls = async (empId, userRole) => {
   const endpoint =
-    userRole === "admin" ? `/api/payrolls` : `/api/payrolls?empId=${empId}`;
+    userRole === "admin" || userRole === "superAdmin"
+      ? `/api/payrolls`
+      : `/api/payrolls?empId=${empId}`;
   return await commonApi("GET", endpoint);
 };
 
 export const fetchEmployeePayroll = async (empId) => {
   return await commonApi("GET", `/api/employees/${empId}/payroll`);
+};
+
+export const createPayroll = async (payrollData) => {
+  return await commonApi("POST", "/api/payrolls", payrollData);
+};
+
+export const updatePayroll = async (payrollData) => {
+  return await commonApi(
+    "PUT",
+    `/api/payrolls/${payrollData.empId}/${payrollData.month}`,
+    payrollData
+  );
+};
+
+export const deletePayroll = async (empId, month) => {
+  return await commonApi("DELETE", `/api/payrolls/${empId}/${month}`);
+};
+
+export const fetchPayrollByMonth = async (empId, month) => {
+  return await commonApi("GET", `/api/payrolls/${empId}/${month}`);
 };
 
 export const fetchLoanRequests = async (empId) => {
@@ -107,14 +161,35 @@ export const submitLeaveRequestData = async (leaveRequest) => {
 };
 
 // -----------------------------------
-// Event APIs
+// Time Tracking APIs
 // -----------------------------------
-export const fetchEventsApi = async () => {
-  return await commonApi("GET", "/api/events");
+export const clockInApi = async (empId) => {
+  return await commonApi("POST", "/api/time/clock-in", { empId });
+};
+
+export const clockOutApi = async (empId) => {
+  return await commonApi("POST", "/api/time/clock-out", { empId });
+};
+
+export const fetchEventsApi = async (empId) => {
+  return await commonApi("GET", `/api/time/events/${empId}`);
 };
 
 export const logAttendanceApi = async (empId, status, date) => {
-  return await commonApi("POST", "/api/attendance", { empId, date, status });
+  console.log("Logging attendance:", { empId, status, date }); // Log the attendance data being sent
+  return await commonApi("POST", "/api/time/attendance", {
+    empId,
+    status,
+    date,
+  });
+};
+
+export const fetchAttendanceDataApi = async (empId) => {
+  return await commonApi("GET", `/api/time/attendance/${empId}`);
+};
+
+export const fetchDailyHoursApi = async (empId, date) => {
+  return await commonApi("GET", `/api/time/daily-hours/${empId}?date=${date}`);
 };
 
 // -----------------------------------
@@ -124,8 +199,12 @@ export const fetchAllPerformance = async () => {
   return await commonApi("GET", "/api/performance");
 };
 
+export const fetchPerformanceDataByEmployee = async (empId) => {
+  return await commonApi("GET", `/api/performance/${empId}`);
+};
+
 export const fetchAllTraining = async () => {
-  return await commonApi("GET", "/api/training");
+  return await commonApi("GET", "/api/performance/training");
 };
 
 export const addPerformanceData = async (newData) => {
@@ -133,11 +212,7 @@ export const addPerformanceData = async (newData) => {
 };
 
 export const updatePerformanceData = async (updatedData) => {
-  return await commonApi(
-    "PUT",
-    `/api/performance/${updatedData.empId}/${updatedData.month}`,
-    updatedData
-  );
+  return await commonApi("PUT", "/api/performance", updatedData);
 };
 
 export const deletePerformanceData = async ({ empId, month }) => {
@@ -145,19 +220,66 @@ export const deletePerformanceData = async ({ empId, month }) => {
 };
 
 export const addTrainingDetails = async (newTraining) => {
-  return await commonApi("POST", "/api/training", newTraining);
+  try {
+    const response = await commonApi(
+      "POST",
+      "/api/performance/training",
+      newTraining
+    );
+    console.log("Add Training Response:", response); // Log the response
+    return response;
+  } catch (error) {
+    console.error("Error adding training details:", error); // Log the error
+    throw new Error(
+      error.response?.data?.message || "Failed to add training details"
+    );
+  }
 };
 
-export const updateTrainingDetails = async (updatedTraining) => {
-  return await commonApi(
-    "PUT",
-    `/api/training/${updatedTraining.id}`,
-    updatedTraining
-  );
+export const updateTrainingDetails = async (trainingData) => {
+  // Check if trainingData and trainingId are defined
+  if (!trainingData || !trainingData.trainingId) {
+    throw new Error("Invalid training data: trainingId is required.");
+  }
+
+  try {
+    const response = await commonApi(
+      "PUT",
+      `/api/performance/training/${trainingData.trainingId}`, // Updated to use trainingId
+      trainingData
+    );
+
+    // Ensure the response is structured correctly
+    if (!response) {
+      throw new Error("No response received from the server.");
+    }
+
+    return response; // Return the updated training data
+  } catch (error) {
+    throw new Error(
+      error.response?.data?.message || "Failed to update training details"
+    );
+  }
 };
 
-export const deleteTrainingDetails = async (id) => {
-  return await commonApi("DELETE", `/api/training/${id}`);
+export const deleteTrainingDetails = async (trainingId) => {
+  // Updated parameter name
+  try {
+    console.log("Making DELETE request for training ID:", trainingId); // Updated to use trainingId
+    const response = await commonApi(
+      "DELETE",
+      `/api/training/${trainingId}` // Updated to use trainingId
+    );
+    console.log("Delete response:", response);
+    if (!response || !response.trainingId) {
+      // Updated to check for trainingId
+      throw new Error("Invalid response from server");
+    }
+    return response;
+  } catch (error) {
+    console.error("Delete request failed:", error);
+    throw error;
+  }
 };
 
 // -----------------------------------
@@ -197,6 +319,29 @@ export const deleteNotification = async (id) => {
 };
 
 // -----------------------------------
+// Profile API
+// -----------------------------------
+export const uploadProfileImage = async (empId, formData) => {
+  return await commonApi(
+    "POST",
+    `/api/profiles/${empId}/profile-image`,
+    formData
+  );
+};
+
+export const updateEmployeeProfile = async (empId, profileData) => {
+  if (!empId) {
+    throw new Error("empId is required to update the employee profile.");
+  }
+
+  return await commonApi("PUT", `/api/profiles/${empId}`, profileData);
+};
+
+export const fetchEmployeeProfile = async (empId) => {
+  return await commonApi("GET", `/api/profiles/${empId}`);
+};
+
+// -----------------------------------
 // Export all API functions
 // -----------------------------------
 const allApi = {
@@ -207,21 +352,28 @@ const allApi = {
   fetchEmployeeById,
   updateEmployeeProfile,
   login,
-  sendOtp,
-  verifyOtp,
   registerUser,
   fetchEmployeeByEmailOrPhone,
   fetchUserRoles,
   updatePassword,
   fetchAllPayrolls,
   fetchEmployeePayroll,
+  createPayroll,
+  updatePayroll,
+  deletePayroll,
+  fetchPayrollByMonth,
   fetchLoanRequests,
   fetchAttendanceData,
   fetchLeaveRequestsData,
   submitLeaveRequestData,
+  clockInApi,
+  clockOutApi,
   fetchEventsApi,
   logAttendanceApi,
+  fetchAttendanceDataApi,
+  fetchDailyHoursApi,
   fetchAllPerformance,
+  fetchPerformanceDataByEmployee,
   fetchAllTraining,
   addPerformanceData,
   updatePerformanceData,
@@ -236,6 +388,9 @@ const allApi = {
   fetchNotifications,
   createNotification,
   deleteNotification,
+  uploadProfileImage,
+  fetchEmployeeProfile,
+  resetPassword,
 };
 
 export default allApi;

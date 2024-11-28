@@ -50,7 +50,7 @@ const AnnouncementsHelpPage = () => {
   }, [dispatch, status]);
 
   useEffect(() => {
-    if (status === "succeeded") {
+    if (status === "succeeded" && announcements.length > 0) {
       addNotifications(announcements); // Add notifications if needed
     }
   }, [announcements, status, addNotifications]);

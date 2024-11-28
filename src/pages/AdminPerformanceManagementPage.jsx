@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Box,
@@ -28,7 +28,8 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import IconButton from "@mui/material/IconButton";
 import { FixedSizeList as ListContainer } from "react-window";
 import {
-  fetchAllData,
+  fetchPerformanceData,
+  fetchTrainingData,
   fetchEmployees,
   addPerformanceData,
   updatePerformanceData,
@@ -42,6 +43,7 @@ import {
 import { useNotificationContext } from "../components/NotificationContext";
 
 const AdminPerformanceManagementPage = () => {
+  const [selectedTrainingId, setSelectedTrainingId] = useState("");
   const dispatch = useDispatch();
   const { performanceData, trainingData, snackbar, employees } = useSelector(
     (state) => state.performance
@@ -57,7 +59,7 @@ const AdminPerformanceManagementPage = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const [trainingCurrentPage, setTrainingCurrentPage] = useState(0);
-  const [tabIndex, setTabIndex] = useState(0); // 0 for Performance, 1 for Training
+  const [tabIndex, setTabIndex] = useState(0);
 
   // Training state variables
   const [trainingDate, setTrainingDate] = useState("");
@@ -66,15 +68,15 @@ const AdminPerformanceManagementPage = () => {
   const [trainingLocation, setTrainingLocation] = useState("");
   const [trainingDescription, setTrainingDescription] = useState("");
   const [trainingInstructor, setTrainingInstructor] = useState("");
-  const [trainingLink, setTrainingLink] = useState(""); // New state for Google Form link
+  const [trainingLink, setTrainingLink] = useState("");
   const [trainingEditMode, setTrainingEditMode] = useState(false);
-  const [selectedTrainingId, setSelectedTrainingId] = useState("");
 
   const { addNotifications } = useNotificationContext();
 
   useEffect(() => {
-    dispatch(fetchAllData());
-    dispatch(fetchEmployees()); // Fetch employees when the component mounts
+    dispatch(fetchPerformanceData());
+    dispatch(fetchTrainingData());
+    dispatch(fetchEmployees());
   }, [dispatch]);
 
   useEffect(() => {
@@ -83,11 +85,11 @@ const AdminPerformanceManagementPage = () => {
         employees.filter(
           (employee) =>
             employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            employee.id.toString().includes(searchTerm)
+            (employee.empId && employee.empId.toString().includes(searchTerm))
         )
       );
     }
-  }, [searchTerm, employees]); // Add employees to the dependency array
+  }, [searchTerm, employees]);
 
   const handleSnackbarClose = () => {
     dispatch(closeSnackbar());
@@ -114,7 +116,7 @@ const AdminPerformanceManagementPage = () => {
     };
 
     try {
-      await dispatch(addPerformanceData(newPerformanceData)).unwrap();
+      await dispatch(addPerformanceData(newPerformanceData));
       resetForm();
       dispatch(
         setSnackbar({
@@ -148,7 +150,7 @@ const AdminPerformanceManagementPage = () => {
     };
 
     try {
-      await dispatch(updatePerformanceData(updatedData)).unwrap();
+      await dispatch(updatePerformanceData(updatedData));
       resetForm();
       dispatch(
         setSnackbar({
@@ -172,14 +174,16 @@ const AdminPerformanceManagementPage = () => {
     setPerformance(data.performance);
     setEditMode(true);
     setSearchTerm(
-      `${data.empId} - ${employees.find((emp) => emp.id === data.empId)?.name}`
+      `${data.empId} - ${
+        employees.find((emp) => emp.empId === data.empId)?.name
+      }`
     );
     setDropdownOpen(false);
   };
 
   const handleDeletePerformance = async (empId, month) => {
     try {
-      await dispatch(deletePerformanceData({ empId, month })).unwrap();
+      await dispatch(deletePerformanceData({ empId, month }));
       dispatch(
         setSnackbar({
           message: "Performance data deleted successfully.",
@@ -217,13 +221,13 @@ const AdminPerformanceManagementPage = () => {
       }}
       onClick={() => {
         const employee = filteredEmployees[index];
-        setSelectedEmployee(employee.id);
-        setSearchTerm(`${employee.id} - ${employee.name}`);
+        setSelectedEmployee(employee.empId);
+        setSearchTerm(`${employee.empId} - ${employee.name}`);
         setDropdownOpen(false);
       }}
     >
       <ListItemText
-        primary={`${filteredEmployees[index].id} - ${filteredEmployees[index].name}`}
+        primary={`${filteredEmployees[index].empId} - ${filteredEmployees[index].name}`}
       />
     </ListItem>
   );
@@ -240,8 +244,7 @@ const AdminPerformanceManagementPage = () => {
       !trainingDuration ||
       !trainingLocation ||
       !trainingDescription ||
-      !trainingInstructor ||
-      !trainingLink
+      !trainingInstructor
     ) {
       dispatch(
         setSnackbar({ message: "All fields are required.", severity: "error" })
@@ -249,12 +252,9 @@ const AdminPerformanceManagementPage = () => {
       return;
     }
 
-    const formattedTime = convertTo12HourFormat(trainingTime);
-
     const newTrainingData = {
-      id: selectedTrainingId || Date.now(),
       date: trainingDate,
-      time: formattedTime,
+      time: trainingTime,
       duration: trainingDuration,
       location: trainingLocation,
       description: trainingDescription,
@@ -262,9 +262,20 @@ const AdminPerformanceManagementPage = () => {
       link: trainingLink,
     };
 
+    console.log("New Training Data:", newTrainingData);
     try {
       if (trainingEditMode) {
-        await dispatch(updateTrainingDetails(newTrainingData)).unwrap();
+        const response = await dispatch(
+          updateTrainingDetails({
+            ...newTrainingData,
+            trainingId: selectedTrainingId,
+          })
+        );
+        if (response.error) {
+          throw new Error(
+            response.error.message || "Failed to update training details."
+          );
+        }
         dispatch(
           setSnackbar({
             message: "Training details updated successfully.",
@@ -272,11 +283,15 @@ const AdminPerformanceManagementPage = () => {
           })
         );
       } else {
-        await dispatch(addTrainingDetails(newTrainingData)).unwrap();
-        // Notify employees about the new training session
+        const response = await dispatch(addTrainingDetails(newTrainingData));
+        if (response.error) {
+          throw new Error(
+            response.error.message || "Failed to add training details."
+          );
+        }
         addNotifications([
           {
-            type: "info", // You can change this to "success" or another type as needed
+            type: "info",
             text: `A new training session has been added: ${trainingDescription} on ${trainingDate} at ${trainingTime}`,
           },
         ]);
@@ -287,10 +302,12 @@ const AdminPerformanceManagementPage = () => {
           })
         );
       }
+      // Fetch updated training data after adding
+      dispatch(fetchTrainingData());
     } catch (error) {
       dispatch(
         setSnackbar({
-          message: "Failed to add/update training details.",
+          message: error.message, // Ensure this is a string
           severity: "error",
         })
       );
@@ -299,7 +316,12 @@ const AdminPerformanceManagementPage = () => {
     }
   };
 
-  const handleEditTraining = async (data) => {
+  const handleEditTraining = (data) => {
+    console.log("Editing training data:", data); // Add this line
+    if (!data) {
+      console.error("No training data found to edit.");
+      return;
+    }
     setTrainingDate(data.date);
     setTrainingTime(data.time);
     setTrainingDuration(data.duration);
@@ -308,12 +330,12 @@ const AdminPerformanceManagementPage = () => {
     setTrainingInstructor(data.instructor);
     setTrainingLink(data.link);
     setTrainingEditMode(true);
-    setSelectedTrainingId(data.id);
+    setSelectedTrainingId(data.trainingId); // Update to use trainingId
   };
 
-  const handleDeleteTraining = async (id) => {
+  const handleDeleteTraining = async (trainingId) => {
     try {
-      await dispatch(deleteTrainingDetails(id)).unwrap();
+      await dispatch(deleteTrainingDetails(trainingId)); // Update to use trainingId
       dispatch(
         setSnackbar({
           message: "Training details deleted successfully.",
@@ -339,28 +361,28 @@ const AdminPerformanceManagementPage = () => {
     setTrainingInstructor("");
     setTrainingLink("");
     setTrainingEditMode(false);
-    setSelectedTrainingId("");
-  };
-
-  const convertTo12HourFormat = (timeString) => {
-    const [hour, minute] = timeString.split(":").map(Number);
-    const ampm = hour >= 12 ? "PM" : "AM";
-    const formattedHour = hour % 12 || 12; // Convert 0 to 12 for midnight
-    const formattedMinute = minute.toString().padStart(2, "0"); // Ensure two-digit minute
-    return `${formattedHour}:${formattedMinute} ${ampm}`;
+    setSelectedTrainingId(""); // Reset selectedTrainingId
   };
 
   const formatTime = (timeString) => {
-    if (!timeString) return "Invalid time";
-    const [time, ampm] = timeString.split(" ");
-    const [hour, minute] = time.split(":").map(Number);
+    if (!timeString) return "Invalid time"; // Handle invalid time
+
+    // Split the time string into hour and minute
+    const [hour, minute] = timeString.split(":").map(Number);
+
     if (isNaN(hour) || isNaN(minute)) {
       console.error("Invalid time format:", timeString);
-      return "Invalid time";
+      return "Invalid time"; // Handle invalid format
     }
-    let formattedHour = hour % 12 || 12; // Convert 0 to 12 for midnight
-    const formattedMinute = minute.toString().padStart(2, "0"); // Ensure two-digit minute
-    return `${formattedHour}:${formattedMinute} ${ampm}`;
+
+    // Determine AM or PM
+    const ampm = hour >= 12 ? "PM" : "AM";
+
+    // Convert hour from 24-hour to 12-hour format
+    const formattedHour = hour % 12 || 12; // Convert hour to 12-hour format, treating 0 as 12
+
+    // Return the formatted time
+    return `${formattedHour}:${minute.toString().padStart(2, "0")} ${ampm}`;
   };
 
   return (
@@ -379,10 +401,10 @@ const AdminPerformanceManagementPage = () => {
           mb: 3,
           "& .MuiTabs-flexContainer": { justifyContent: "space-around" },
           "& .MuiTab-root": {
-            color: "#800080", // Set tab text color to purple
+            color: "#800080",
           },
           "& .MuiTabs-indicator": {
-            backgroundColor: "#800080", // Set underline color to purple
+            backgroundColor: "#800080",
           },
         }}
         variant="scrollable"
@@ -507,13 +529,13 @@ const AdminPerformanceManagementPage = () => {
                     key={`${data.empId}-${data.month}`}
                     sx={{
                       "&:hover": {
-                        backgroundColor: "#f0f0f0", // Change background on hover
+                        backgroundColor: "#f0f0f0",
                       },
                     }}
                   >
                     <TableCell>
                       {`${data.empId} - ${
-                        employees.find((emp) => emp.id === data.empId)?.name
+                        employees.find((emp) => emp.empId === data.empId)?.name
                       }`}
                     </TableCell>
                     <TableCell>{formatMonth(data.month)}</TableCell>
@@ -602,7 +624,7 @@ const AdminPerformanceManagementPage = () => {
                 margin="normal"
               />
               <TextField
-                label="Google Form Link" // New field for Google Form link
+                label="Google Form Link"
                 value={trainingLink}
                 onChange={(e) => setTrainingLink(e.target.value)}
                 fullWidth
@@ -672,7 +694,7 @@ const AdminPerformanceManagementPage = () => {
               <TableBody>
                 {Array.isArray(trainingData) &&
                   trainingData.map((data) => (
-                    <TableRow key={data.id}>
+                    <TableRow key={data.trainingId}>
                       <TableCell>{data.date}</TableCell>
                       <TableCell>{formatTime(data.time)}</TableCell>
                       <TableCell>{data.duration}</TableCell>
@@ -685,7 +707,7 @@ const AdminPerformanceManagementPage = () => {
                         </IconButton>
                         <IconButton
                           color="error"
-                          onClick={() => handleDeleteTraining(data.id)}
+                          onClick={() => handleDeleteTraining(data.trainingId)}
                         >
                           <DeleteIcon />
                         </IconButton>

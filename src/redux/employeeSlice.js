@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import allApi from '../services/allApi';
+import allApi from "../services/allApi";
 
 // Async thunk for fetching employees from the API
 export const fetchEmployees = createAsyncThunk(
@@ -10,6 +10,29 @@ export const fetchEmployees = createAsyncThunk(
       throw new Error(response.message);
     }
     return response; // Assuming the API returns an array of employee objects including roles
+  }
+);
+
+// Async thunk for fetching an employee by ID from the API
+export const fetchEmployeeById = createAsyncThunk(
+  "employees/fetchEmployeeById",
+  async (empId) => {
+    const response = await allApi.fetchEmployeeById(empId);
+    if (response.error) {
+      throw new Error(response.message);
+    }
+    return response; // Assuming the API returns the employee object including roles
+  }
+);
+
+export const fetchEmployeeByEmailOrPhone = createAsyncThunk(
+  "employees/fetchEmployeeByEmailOrPhone",
+  async (emailOrPhone) => {
+    const response = await allApi.fetchEmployeeByEmailOrPhone(emailOrPhone);
+    if (response.error) {
+      throw new Error(response.message);
+    }
+    return response; // This should return the employee object if found
   }
 );
 
@@ -53,10 +76,19 @@ const employeeSlice = createSlice({
   name: "employees",
   initialState: {
     employees: [],
+    selectedEmployee: null, // New property to store the selected employee
     status: "idle",
     error: null,
+    editEmpId: null,
   },
-  reducers: {},
+  reducers: {
+    resetSelectedEmployee(state) {
+      state.selectedEmployee = null; // Reset selected employee
+    },
+    setEditEmpId(state, action) {
+      state.editEmpId = action.payload;
+    },
+  },
   extraReducers(builder) {
     builder
       .addCase(fetchEmployees.pending, (state) => {
@@ -67,6 +99,17 @@ const employeeSlice = createSlice({
         state.employees = action.payload;
       })
       .addCase(fetchEmployees.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.error.message;
+      })
+      .addCase(fetchEmployeeById.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(fetchEmployeeById.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.selectedEmployee = action.payload; // Store the fetched employee
+      })
+      .addCase(fetchEmployeeById.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.error.message;
       })
@@ -89,6 +132,12 @@ const employeeSlice = createSlice({
   },
 });
 
-export const selectEmployeeExists = (state, empId) => state.employees.employees.some(emp => emp.empId === empId);
+export const { resetSelectedEmployee, setEditEmpId } = employeeSlice.actions;
+
+export const selectEmployeeExists = (state, empId) =>
+  state.employees.employees.some((emp) => emp.empId === empId);
+
+export const selectSelectedEmployee = (state) =>
+  state.employees.selectedEmployee;
 
 export default employeeSlice.reducer;

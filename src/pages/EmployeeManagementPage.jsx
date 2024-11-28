@@ -22,9 +22,15 @@ import {
   DialogContent,
   DialogActions,
   InputAdornment,
+  FormControl,
+  InputLabel,
 } from "@mui/material";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import dayjs from "dayjs";
 import Switch from "@mui/material/Switch";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
@@ -35,16 +41,15 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
 import {
   fetchEmployees,
+  fetchEmployeeById,
   addEmployeeAsync,
   updateEmployeeAsync,
   deleteEmployeeAsync,
+  setEditEmpId,
 } from "../redux/employeeSlice";
 
 const EmployeeManagementPage = () => {
-  const [openDialog, setOpenDialog] = useState(false);
-  const [employeeToDelete, setEmployeeToDelete] = useState(null);
-  const [currentTab, setCurrentTab] = useState(0);
-  const [employee, setEmployee] = useState({
+  const initialEmployeeState = {
     empId: "",
     name: "",
     position: "",
@@ -52,23 +57,30 @@ const EmployeeManagementPage = () => {
     email: "",
     phone: "",
     address: "",
+    manager: "",
+    startDate: null,
     emergencyContactName: "",
     emergencyContactRelationship: "",
     emergencyContactPhone: "",
     roles: [],
-  });
+  };
+  const [openDialog, setOpenDialog] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState(null);
+  const [currentTab, setCurrentTab] = useState(0);
+  const [employee, setEmployee] = useState(initialEmployeeState);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const [searchQuery, setSearchQuery] = useState("");
+  const editEmpId = useSelector((state) => state.employees.editEmpId);
   const navigate = useNavigate();
-  const { empId } = useParams();
   const dispatch = useDispatch();
 
   const employees = useSelector((state) => state.employees.employees);
   const status = useSelector((state) => state.employees.status);
-  const userRole = useSelector((state) => state.auth.userRole);
+  const roles = useSelector((state) => state.auth.roles);
+  const isSuperAdmin = roles.includes("superAdmin");
 
   useEffect(() => {
     if (status === "idle") {
@@ -77,33 +89,36 @@ const EmployeeManagementPage = () => {
   }, [status, dispatch]);
 
   useEffect(() => {
-    if (empId) {
-      const employeeToEdit = employees.find((emp) => emp.empId === empId);
+    if (editEmpId) {
+      dispatch(fetchEmployeeById(editEmpId)); // Fetch employee data by ID
+      console.log("Fetching employee data for ID:", editEmpId);
+    }
+  }, [editEmpId, dispatch]);
+
+  useEffect(() => {
+    if (editEmpId) {
+      const employeeToEdit = employees.find((emp) => emp.empId === editEmpId);
       if (employeeToEdit) {
-        setEmployee(employeeToEdit);
-        setCurrentTab(1);
+        setEmployee({
+          ...employeeToEdit,
+          startDate: dayjs(employeeToEdit.startDate), // Parse the date string to Day.js object
+        });
+        console.log("Employee to Edit:", employeeToEdit);
+        setCurrentTab(1); // Switch to Add/Edit Employee tab
       }
     }
-  }, [empId, employees]);
+  }, [editEmpId, employees]); // Ensure to populate employee data when editing
 
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
     if (newValue === 0) {
-      setEmployee({
-        empId: "",
-        name: "",
-        position: "",
-        department: "",
-        email: "",
-        phone: "",
-        address: "",
-        emergencyContactName: "",
-        emergencyContactRelationship: "",
-        emergencyContactPhone: "",
-        roles: [],
-      });
+      resetEmployeeForm();
       setPage(0);
     }
+  };
+
+  const resetEmployeeForm = () => {
+    setEmployee(initialEmployeeState);
   };
 
   const handleChange = (e) => {
@@ -111,19 +126,29 @@ const EmployeeManagementPage = () => {
     setEmployee({ ...employee, [name]: value });
   };
 
+  const handleDateChange = (date) => {
+    setEmployee({ ...employee, startDate: date });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log("Submitting Employee Data:", employee);
     try {
-      if (empId) {
+      if (editEmpId) {
         await dispatch(updateEmployeeAsync(employee));
         setSnackbarMessage("Employee updated successfully!");
       } else {
         const { empId, ...newEmployee } = employee;
-        newEmployee.roles = employee.roles;
+        newEmployee.roles = isSuperAdmin
+          ? employee.roles.length > 0
+            ? employee.roles
+            : ["employee"]
+          : ["employee"];
         await dispatch(addEmployeeAsync(newEmployee));
         setSnackbarMessage("Employee added successfully!");
       }
       setSnackbarOpen(true);
+      setCurrentTab(0); // Navigate back to Employee List tab
       setTimeout(() => {
         navigate("/admin/employees");
       }, 1000);
@@ -134,8 +159,20 @@ const EmployeeManagementPage = () => {
     }
   };
 
+  const validatePhoneNumbers = () => {
+    const phoneRegex = /^\+\d{1,3}\d{1,14}$/; // Regex for validating phone numbers with country code
+    return (
+      phoneRegex.test(employee.phone) &&
+      phoneRegex.test(employee.emergencyContactPhone)
+    );
+  };
+
   const handleEditClick = (employee) => {
-    setEmployee(employee);
+    dispatch(setEditEmpId(employee.empId)); // Set the editEmpId in the Redux store
+    setEmployee({
+      ...employee,
+      startDate: dayjs(employee.startDate), // Parse the date string to Day.js object
+    });
     setCurrentTab(1);
   };
 
@@ -222,9 +259,6 @@ const EmployeeManagementPage = () => {
             >
               <Tab value={0} label="Employee List" sx={{ flexGrow: 1 }} />
               <Tab value={1} label="Add/Edit Employee" sx={{ flexGrow: 1 }} />
-              {userRole === "super admin" && (
-                <Tab value={2} label="Admin Access" sx={{ flexGrow: 1 }} />
-              )}
             </Tabs>
           </Box>
           {currentTab === 0 && (
@@ -256,16 +290,14 @@ const EmployeeManagementPage = () => {
                       <TableCell>Name</TableCell>
                       <TableCell>Position</TableCell>
                       <TableCell>Department</TableCell>
-                      {userRole === "super admin" && (
-                        <TableCell>Role</TableCell>
-                      )}
+                      {isSuperAdmin && <TableCell>Role</TableCell>}
                       <TableCell>Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {employees
                       .filter((emp) => {
-                        if (userRole === "super admin") {
+                        if (isSuperAdmin) {
                           return (
                             emp.empId.toString().includes(searchQuery) ||
                             emp.name
@@ -298,7 +330,7 @@ const EmployeeManagementPage = () => {
                           <TableCell>{employee.name}</TableCell>
                           <TableCell>{employee.position}</TableCell>
                           <TableCell>{employee.department}</TableCell>
-                          {userRole === "super admin" && (
+                          {isSuperAdmin && (
                             <TableCell>{employee.roles.join(", ")}</TableCell>
                           )}
                           <TableCell>
@@ -330,9 +362,6 @@ const EmployeeManagementPage = () => {
           )}
           {currentTab === 1 && (
             <Box sx={{ p: 2 }}>
-              <Typography variant="h5">
-                {empId ? "Edit Employee" : "Add Employee"}
-              </Typography>
               <form onSubmit={handleSubmit}>
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6}>
@@ -384,10 +413,11 @@ const EmployeeManagementPage = () => {
                       required
                       id="phone"
                       name="phone"
-                      label="Phone"
+                      label="Phone (include country code)"
                       value={employee.phone}
                       onChange={handleChange}
                       fullWidth
+                      placeholder="+91.........."
                     />
                   </Grid>
                   <Grid item xs={12} sm={6}>
@@ -428,28 +458,58 @@ const EmployeeManagementPage = () => {
                       required
                       id="emergencyContactPhone"
                       name="emergencyContactPhone"
-                      label="Emergency Contact Phone"
+                      label="Emergency Contact Phone (include country code)"
                       value={employee.emergencyContactPhone}
+                      onChange={handleChange}
+                      fullWidth
+                      placeholder="+91.........."
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      required
+                      id="manager"
+                      name="manager"
+                      label="Manager"
+                      value={employee.manager}
                       onChange={handleChange}
                       fullWidth
                     />
                   </Grid>
-                  {userRole === "super admin" && (
+                  <Grid item xs={12} sm={6}>
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                      <DatePicker
+                        label="Start Date"
+                        value={employee.startDate}
+                        onChange={handleDateChange}
+                        renderInput={(params) => (
+                          <TextField {...params} required fullWidth />
+                        )}
+                        inputFormat="DD-MM-YYYY" // Set the desired date format
+                      />
+                    </LocalizationProvider>
+                  </Grid>
+                  {isSuperAdmin && (
                     <Grid item xs={12} sm={6}>
-                      <Select
-                        multiple
-                        required
-                        id="roles"
-                        name="roles"
-                        label="Roles"
-                        value={employee.roles}
-                        onChange={handleRoleChange}
-                        fullWidth
-                      >
-                        <MenuItem value="employee">Employee</MenuItem>
-                        <MenuItem value="admin">Admin</MenuItem>
-                        <MenuItem value="manager">Manager</MenuItem>
-                      </Select>
+                      <FormControl fullWidth required>
+                        <InputLabel id="roles" shrink={!!employee.roles.length}>
+                          Roles
+                        </InputLabel>
+                        <Select
+                          label="Roles"
+                          multiple
+                          id="roles"
+                          name="roles"
+                          value={employee.roles}
+                          onChange={handleRoleChange}
+                          renderValue={(selected) => selected.join(", ")} // Display selected roles
+                          displayEmpty
+                        >
+                          <MenuItem value="employee">Employee</MenuItem>
+                          <MenuItem value="admin">Admin</MenuItem>
+                          {/* Add more roles as needed */}
+                        </Select>
+                      </FormControl>
                     </Grid>
                   )}
                 </Grid>
@@ -459,7 +519,7 @@ const EmployeeManagementPage = () => {
                   color="primary"
                   sx={{ marginTop: 2 }}
                 >
-                  {empId ? "Update" : "Add"}
+                  {editEmpId ? "Update" : "Add"}
                 </Button>
               </form>
             </Box>

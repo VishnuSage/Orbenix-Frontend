@@ -57,7 +57,7 @@ const TimeTrackingPage = () => {
     (state) => state.timeTracking.snackbarMessage
   );
 
-  const currentEmployeeId = useSelector((state) => state.auth.employee?.empId);
+  const empId = useSelector((state) => state.auth.empId); // Access empId from the Redux state
 
   useEffect(() => {
     let timer;
@@ -91,7 +91,7 @@ const TimeTrackingPage = () => {
   const handleClockIn = async () => {
     try {
       const clockInTime = Date.now();
-      await dispatch(clockInThunk({ empId: currentEmployeeId, dispatch }));
+      await dispatch(clockInThunk({ empId: empId, dispatch }));
 
       // Add clock-in event
       dispatch(
@@ -103,7 +103,7 @@ const TimeTrackingPage = () => {
       );
 
       showSnackbar("Clocked In Successfully!");
-      await dispatch(fetchAttendanceData(currentEmployeeId));
+      await dispatch(fetchAttendanceData(empId));
     } catch (error) {
       console.error("Error during clock in:", error);
       showSnackbar("Failed to clock in. Please try again.");
@@ -113,7 +113,7 @@ const TimeTrackingPage = () => {
   const handleClockOut = async () => {
     try {
       const clockOutTime = Date.now();
-      await dispatch(clockOutThunk({ empId: currentEmployeeId, dispatch }));
+      await dispatch(clockOutThunk({ empId: empId, dispatch }));
 
       // Add clock-out event
       dispatch(
@@ -125,7 +125,7 @@ const TimeTrackingPage = () => {
       );
 
       showSnackbar("Clocked Out Successfully!");
-      await dispatch(fetchAttendanceData(currentEmployeeId));
+      await dispatch(fetchAttendanceData(empId));
     } catch (error) {
       console.error("Error during clock out:", error);
       showSnackbar("Failed to clock out. Please try again.");

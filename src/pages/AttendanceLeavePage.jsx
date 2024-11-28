@@ -88,7 +88,7 @@ const AttendanceLeavePage = () => {
     error,
   } = useSelector((state) => state.attendanceLeave);
 
-  const currentEmployeeId = useSelector((state) => state.auth.employee?.empId);
+  const empId = useSelector((state) => state.auth.empId); // Access empId from the Redux state
 
   const [leaveRequest, setLeaveRequest] = useState({
     type: "",
@@ -107,9 +107,9 @@ const AttendanceLeavePage = () => {
   const { addNotifications } = useNotificationContext();
 
   useEffect(() => {
-    dispatch(fetchAttendanceData(currentEmployeeId)); // Fetch attendance data
+    dispatch(fetchAttendanceData(empId)); // Fetch attendance data
     dispatch(fetchLeaveRequestsData()); // Fetch leave requests
-  }, [dispatch, currentEmployeeId]);
+  }, [dispatch, empId]);
 
   useEffect(() => {
     if (successMessage) {
@@ -168,13 +168,13 @@ const AttendanceLeavePage = () => {
       await dispatch(
         submitLeaveRequestData({
           ...leaveRequest,
-          employeeId: currentEmployeeId,
+          employeeId: empId,
         })
       );
       addNotifications([
         {
           type: "info", // or "success", depending on how you want to categorize it
-          text: `New leave request submitted by Employee ID: ${currentEmployeeId} for ${leaveRequest.type} from ${leaveRequest.startDate} to ${leaveRequest.endDate}.`,
+          text: `New leave request submitted by Employee ID: ${empId} for ${leaveRequest.type} from ${leaveRequest.startDate} to ${leaveRequest.endDate}.`,
         },
       ]);
       setSnackbarMessage("Leave request submitted successfully!");
@@ -458,9 +458,9 @@ const AttendanceLeavePage = () => {
                     component="span"
                     sx={{ fontWeight: "bold", marginRight: 2 }}
                   >
-                    {attendanceData.remainingLeave[currentEmployeeId] !==
+                    {attendanceData.remainingLeave[empId] !==
                     undefined
-                      ? attendanceData.remainingLeave[currentEmployeeId]
+                      ? attendanceData.remainingLeave[empId]
                       : 0}
                   </Typography>
                   <Typography
@@ -480,7 +480,7 @@ const AttendanceLeavePage = () => {
                   <LinearProgress
                     variant="determinate"
                     value={
-                      (attendanceData.remainingLeave[currentEmployeeId] / 30) *
+                      (attendanceData.remainingLeave[empId] / 30) *
                       100 // Assuming 30 is the total leave days for this example
                     }
                     sx={{ height: 10, borderRadius: 5 }}

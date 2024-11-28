@@ -13,15 +13,24 @@ import {
 } from "@mui/material";
 import { useDispatch, useSelector } from "react-redux";
 import {
+  registerUser,
   loginEmployeeAsync,
-  sendOtpAsync,
-  verifyOtpAsync,
   sendPasswordResetAsync,
+  sendVerificationCodeAsync,
   setError,
-  clearOtpState,
   toggleRegistering,
-  setOtpTimer,
+  toggleForgotPassword,
+  setLoggedIn,
+  setSelectedRole,
+  setEmpId,
+  setToken,
+  verifyOtpAsync,
+  clearVerificationState,
+  clearPasswordResetState,
+  clearRegistrationState,
+  setRoles,
 } from "../redux/authSlice";
+import { fetchEmployeeByEmailOrPhone } from "../redux/employeeSlice";
 import { styled } from "@mui/material/styles";
 import PersonIcon from "@mui/icons-material/Person";
 import LockIcon from "@mui/icons-material/Lock";
@@ -29,6 +38,8 @@ import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import BackgroundImage from "../assets/login-bg.jpg";
 import { useNavigate } from "react-router-dom";
+import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
+import { auth } from "../firebaseConfig";
 
 const StyledCard = styled(Card)({
   backgroundColor: "rgba(255, 255, 255, 0.9)",
@@ -40,50 +51,40 @@ const Auth = () => {
   const [emailOrPhone, setEmailOrPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [otp, setOtp] = useState("");
+  const [otp, setOtp] = useState(""); // State for OTP
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
-  const [isResendDisabled, setIsResendDisabled] = useState(false);
   const [passwordValidationMessage, setPasswordValidationMessage] =
     useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState(""); // New password state
+  const [confirmNewPassword, setConfirmNewPassword] = useState(""); // Confirm new password state
+  const [showNewPassword, setShowNewPassword] = useState(false); // Visibility for new password
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false); // Visibility for confirm new password
   const [roleSelection, setRoleSelection] = useState(false);
-  const [userRole, setUserRole] = useState("");
-  const [forgotPassword, setForgotPassword] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [isSendingVerification, setIsSendingVerification] = useState(false);
+  const [isVerifyingOTP, setIsVerifyingOTP] = useState(false);
+  const [verificationError, setVerificationError] = useState("");
+  const [forgotPasswordStage, setForgotPasswordStage] = useState(1); // 1: Email/Phone, 2: OTP, 3: New Password
+  const [registrationStage, setRegistrationStage] = useState(1); // 1: Email/Phone, 2: OTP, 3: Password
+  const [confirmationResult, setConfirmationResult] = useState(null);
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const {
-    otpSent,
     error,
     loading,
     isRegistering,
-    loadingOtpVerification,
-    otpTimer,
-    roles, // Assuming you have roles in your auth state
+    forgotPassword,
+    authData,
+    registrationSuccess,
+    registrationError,
   } = useSelector((state) => state.auth);
-  const employees = useSelector((state) => state.employees.employees);
-
-  useEffect(() => {
-    let timer;
-    if (otpTimer > 0) {
-      setIsResendDisabled(true);
-      timer = setInterval(() => {
-        dispatch(setOtpTimer(otpTimer - 1));
-      }, 1000);
-    } else {
-      setIsResendDisabled(false);
-      dispatch(setOtpTimer(0));
-    }
-    return () => clearInterval(timer);
-  }, [otpTimer, dispatch]);
 
   const validateEmailOrPhone = (input) => {
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // Basic email pattern
-    const phonePattern = /^[0-9]{10}$/; // Assumes a 10-digit phone number
+    const phonePattern = /^\+\d{1,3}\d{10}$/;
     return emailPattern.test(input) || phonePattern.test(input);
   };
 
@@ -117,15 +118,27 @@ const Auth = () => {
   };
 
   const handlePasswordChange = (e) => {
-    const newPassword = e.target.value;
-    setPassword(newPassword);
+    const password = e.target.value;
+    setPassword(password);
 
     if (isRegistering) {
-      const validationError = validatePassword(newPassword);
+      const validationError = validatePassword(password);
       setPasswordValidationMessage(validationError);
     } else {
       setPasswordValidationMessage("");
     }
+  };
+
+  const handleConfirmPasswordChange = (e) => {
+    setConfirmPassword(e.target.value);
+  };
+
+  const handleNewPasswordChange = (e) => {
+    setNewPassword(e.target.value);
+  };
+
+  const handleConfirmNewPasswordChange = (e) => {
+    setConfirmNewPassword(e.target.value);
   };
 
   const handleTogglePasswordVisibility = () => {
@@ -136,182 +149,246 @@ const Auth = () => {
     setShowConfirmPassword((prev) => !prev);
   };
 
-  const handleAuthSubmit = useCallback(async () => {
-    if (!validateEmailOrPhone(emailOrPhone)) {
-      const errorMessage = "Please enter a valid email or phone number.";
-      dispatch(setError(errorMessage));
-      setSnackbarMessage(errorMessage);
+  const handleToggleNewPasswordVisibility = () => {
+    setShowNewPassword((prev) => !prev);
+  };
+
+  const handleToggleConfirmNewPasswordVisibility = () => {
+    setShowConfirmNewPassword((prev) => !prev);
+  };
+
+  const handleSendVerification = async () => {
+    setIsSendingVerification(true);
+    const appVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+      size: "invisible", // or "normal" if you want it visible
+    });
+
+    try {
+      const confirmationResult = await signInWithPhoneNumber(
+        auth,
+        emailOrPhone,
+        appVerifier
+      );
+
+      // Dispatch the action with confirmationResult
+      const result = await dispatch(
+        sendVerificationCodeAsync({ confirmationResult })
+      );
+
+      if (sendVerificationCodeAsync.fulfilled.match(result)) {
+        setSnackbarMessage("Verification code sent successfully.");
+        setConfirmationResult(confirmationResult); // Store confirmation result
+        setRegistrationStage(2); // Move to the OTP verification stage
+      } else {
+        setSnackbarMessage(result.payload);
+      }
+    } catch (error) {
+      setSnackbarMessage(error.message || "Failed to send verification code.");
+    }
+    setIsSendingVerification(false);
+    setSnackbarOpen(true);
+  };
+
+  const handleSendResetVerification = async () => {
+    setIsSendingVerification(true);
+    const appVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+      size: "invisible", // or "normal" if you want it visible
+    });
+
+    try {
+      const confirmationResult = await signInWithPhoneNumber(
+        auth,
+        emailOrPhone,
+        appVerifier
+      );
+
+      // Dispatch the action with confirmationResult
+      const result = await dispatch(
+        sendVerificationCodeAsync({ confirmationResult })
+      );
+
+      if (sendVerificationCodeAsync.fulfilled.match(result)) {
+        setSnackbarMessage("Verification code sent successfully.");
+        setConfirmationResult(confirmationResult); // Store confirmation result
+        setForgotPasswordStage(2); // Move to the OTP verification stage
+      } else {
+        setSnackbarMessage(result.payload);
+      }
+    } catch (error) {
+      setSnackbarMessage(error.message || "Failed to send verification code.");
+    }
+    setIsSendingVerification(false);
+    setSnackbarOpen(true);
+  };
+
+  const handleVerifyOtp = async () => {
+    setIsVerifyingOTP(true);
+    if (!confirmationResult) {
+      setSnackbarMessage(
+        "No confirmation result available. Please send the OTP again."
+      );
       setSnackbarOpen(true);
       return;
     }
 
-    if (forgotPassword) {
-      try {
-        const employeeExistsInList = (emailOrPhone) => {
-          return employees.some(
-            (emp) => emp.email === emailOrPhone || emp.phone === emailOrPhone
-          );
-        };
-        if (!employeeExistsInList) {
-          const errorMessage = "This email or phone number does not exist.";
-          dispatch(setError(errorMessage));
-          setSnackbarMessage(errorMessage);
-          setSnackbarOpen(true);
-          return;
-        }
-        await dispatch(sendOtpAsync(emailOrPhone)).unwrap();
+    const result = await dispatch(verifyOtpAsync({ otp, confirmationResult }));
+    if (verifyOtpAsync.fulfilled.match(result)) {
+      setSnackbarMessage("OTP verified successfully.");
+      setRegistrationStage(3); // Move to the password setting stage
+    } else {
+      setSnackbarMessage(result.payload);
+    }
+    setIsVerifyingOTP(false);
+    setSnackbarOpen(true);
+  };
 
-        const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailOrPhone);
-        setSnackbarMessage(
-          isEmail
-            ? "A link has been sent to your email."
-            : "An OTP has been sent to your phone number."
-        );
-        setSnackbarOpen(true);
-
-        dispatch(setOtpTimer(30));
-        setIsResendDisabled(true);
-      } catch (error) {
-        dispatch(setError(error.message || "Network error"));
-        setSnackbarMessage(error.message || "Network error");
-        setSnackbarOpen(true);
-      }
-    } else if (isRegistering) {
-      const employeeExists = employees.some(
-        (emp) => emp.email === emailOrPhone || emp.phone === emailOrPhone
+  const handleVerifyResetOtp = async () => {
+    setIsVerifyingOTP(true);
+    if (!confirmationResult) {
+      setSnackbarMessage(
+        "No confirmation result available. Please send the OTP again."
       );
-      if (!employeeExists) {
-        dispatch(setError("You must be added by an admin before registering."));
-        setSnackbarMessage("You must be added by an admin before registering.");
-        setSnackbarOpen(true);
-      } else if (password !== confirmPassword) {
-        dispatch(setError("Passwords do not match."));
-        setSnackbarMessage("Passwords do not match.");
-        setSnackbarOpen(true);
-      } else if (passwordValidationMessage) {
-        dispatch(setError(passwordValidationMessage));
-        setSnackbarMessage(passwordValidationMessage);
-        setSnackbarOpen(true);
-      } else if (!otpSent) {
-        try {
-          await dispatch(sendOtpAsync(emailOrPhone)).unwrap();
-          dispatch(setOtpTimer(30));
-          setIsResendDisabled(true);
-        } catch (error) {
-          dispatch(setError(error.message || "Network error"));
-          setSnackbarMessage(error.message || "Network error");
-          setSnackbarOpen(true);
+      setSnackbarOpen(true);
+      return;
+    }
+
+    const result = await dispatch(verifyOtpAsync({ otp, confirmationResult }));
+    if (verifyOtpAsync.fulfilled.match(result)) {
+      setSnackbarMessage("OTP verified successfully.");
+      setForgotPasswordStage(3); // Move to the OTP verification stage
+    } else {
+      setSnackbarMessage(result.payload);
+    }
+    setIsVerifyingOTP(false);
+    setSnackbarOpen(true);
+  };
+
+  const handleAuthSubmit = useCallback(
+    async (event) => {
+      event.preventDefault();
+
+      if (isRegistering && registrationStage === 3) {
+        console.log("Registration stage 3");
+        if (password && confirmPassword) {
+          if (password !== confirmPassword) {
+            setSnackbarMessage("Passwords do not match.");
+            setSnackbarOpen(true);
+            return;
+          }
+
+          try {
+            await dispatch(registerUser({ emailOrPhone, password }));
+            dispatch(clearRegistrationState());
+            setSnackbarMessage("Registration successful. Please log in.");
+            navigate("/auth");
+          } catch (error) {
+            setSnackbarMessage(error.message || "Network error");
+          }
         }
-      } else {
-        if (otp === "") {
-          dispatch(setError("Please enter the OTP."));
-          setSnackbarMessage("Please enter the OTP.");
+      } else if (forgotPassword && forgotPasswordStage === 3) {
+        if (newPassword && confirmNewPassword) {
+          if (newPassword !== confirmNewPassword) {
+            setSnackbarMessage("New passwords do not match.");
+            setSnackbarOpen(true);
+            return;
+          }
+
+          try {
+            const resultAction = await dispatch(
+              sendPasswordResetAsync({ emailOrPhone, newPassword })
+            );
+
+            if (sendPasswordResetAsync.fulfilled.match(resultAction)) {
+              setSnackbarMessage("Password has been reset successfully.");
+              dispatch(clearPasswordResetState()); // Clear password reset state
+              navigate("/auth"); // Redirect to login after successful reset
+            } else {
+              setSnackbarMessage(
+                resultAction.payload || "Failed to reset password."
+              );
+            }
+          } catch (error) {
+            setSnackbarMessage(error.message || "Network error");
+          }
+        }
+      } else if (isRegistering) {
+        const employee = await dispatch(
+          fetchEmployeeByEmailOrPhone(emailOrPhone)
+        );
+        if (employee.error) {
+          dispatch(
+            setError("You must be added by an admin before registering.")
+          );
+          setSnackbarMessage(
+            "You must be added by an admin before registering."
+          );
           setSnackbarOpen(true);
         } else {
-          try {
-            await dispatch(verifyOtpAsync({ emailOrPhone, otp })).unwrap();
-            // Handle successful OTP verification
-          } catch (error) {
-            dispatch(setError("Invalid OTP"));
-            setSnackbarMessage("Invalid OTP");
-            setSnackbarOpen(true);
-          }
+          // Handle registration logic
+          setRegistrationStage(1); // Reset to email/phone stage
         }
-      }
-    } else {
-      try {
-        const result = await dispatch(
-          loginEmployeeAsync({ emailOrPhone, password })
-        ).unwrap();
-        // Check if the user is a super admin
-        if (result.roles && result.roles.length > 0) {
-          const role = result.roles[0]; // Assuming the first role is the primary one
-          setUserRole(role); // Set the user role
-          // Check if the user is a super admin
-          if (role === "super admin") {
-            navigate("/admin/employees"); // Redirect to the admin dashboard
+      } else {
+        try {
+          const result = await dispatch(
+            loginEmployeeAsync({ emailOrPhone, password })
+          );
+          console.log("Login result:", result);
+          if (loginEmployeeAsync.fulfilled.match(result)) {
+            const { token, empId, roles } = result.payload;
+            console.log("Roles retrieved from login:", roles);
+            setToken(token);
+            setEmpId(empId);
+            setRoles(roles);
+            setLoggedIn(true);
+
+            if (roles.length > 1) {
+              setRoleSelection(true);
+            } else if (roles.length === 1) {
+              const role = roles[0];
+
+              if (role === "superAdmin" || role === "admin") {
+                navigate("/admin/employees");
+              } else {
+                navigate("/payroll");
+              }
+            }
           } else {
-            navigate("/payroll"); // Redirect to the regular dashboard
+            const errorMessage = result.payload;
+            dispatch(setError(errorMessage));
+            setSnackbarMessage(errorMessage);
+            setSnackbarOpen(true);
+            console.error("Login failed:", result.payload);
           }
+        } catch (error) {
+          dispatch(setError("Login failed. Please try again."));
+          setSnackbarMessage("Login failed. Please try again.");
+          setSnackbarOpen(true);
+          console.error("Error in handleAuthSubmit:", error);
         }
-      } catch (error) {
-        dispatch(
-          setError(
-            "No employee found with this email or phone number or incorrect password."
-          )
-        );
-        setSnackbarMessage("No employee found or incorrect password.");
-        setSnackbarOpen(true);
       }
-    }
-  }, [
-    isRegistering,
-    emailOrPhone,
-    password,
-    confirmPassword,
-    otp,
-    otpSent,
-    employees,
-    dispatch,
-    passwordValidationMessage,
-    navigate,
-    forgotPassword,
-  ]);
-
-  const handleResendOtp = useCallback(async () => {
-    try {
-      await dispatch(sendOtpAsync(emailOrPhone)).unwrap();
-      dispatch(setOtpTimer(30));
-      setIsResendDisabled(true);
-      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+ $/.test(emailOrPhone);
-      setSnackbarMessage(
-        isEmail
-          ? "A link has been sent to your email."
-          : "An OTP has been sent to your phone number."
-      );
-      setSnackbarOpen(true);
-    } catch (error) {
-      dispatch(setError(error.message || "Network error"));
-      setSnackbarMessage(error.message || "Network error");
-      setSnackbarOpen(true);
-    }
-  }, [dispatch, emailOrPhone]);
-
-  const handleSnackbarClose = useCallback(() => {
-    setSnackbarOpen(false);
-    dispatch(setError(null));
-    dispatch(clearOtpState());
-  }, [dispatch]);
+    },
+    [
+      isRegistering,
+      forgotPassword,
+      emailOrPhone,
+      password,
+      confirmPassword,
+      newPassword,
+      confirmNewPassword,
+      dispatch,
+      navigate,
+      registrationStage,
+      forgotPasswordStage,
+    ]
+  );
 
   const handleRoleSelection = (role) => {
-    setUserRole(role);
-    navigate(role === "admin" ? "/admin/employees" : "/payroll");
-  };
+    setSelectedRole(role);
 
-  const handleForgotPassword = () => {
-    setForgotPassword(true);
-    setEmailOrPhone(""); // Clear the input field
-  };
-
-  const handleResetPassword = async () => {
-    if (newPassword !== confirmNewPassword) {
-      dispatch(setError("Passwords do not match."));
-      setSnackbarMessage("Passwords do not match.");
-      setSnackbarOpen(true);
-      return;
-    }
-
-    try {
-      await dispatch(
-        sendPasswordResetAsync({ emailOrPhone, newPassword })
-      ).unwrap();
-      setSnackbarMessage("Password has been reset successfully.");
-      setSnackbarOpen(true);
-      setForgotPassword(false); // Close the reset password form
-    } catch (error) {
-      dispatch(setError(error.message || "Network error"));
-      setSnackbarMessage(error.message || "Network error");
-      setSnackbarOpen(true);
+    if (role === "admin" || role === "superAdmin") {
+      navigate("/admin/employees");
+    } else if (role === "employee") {
+      navigate("/payroll");
     }
   };
 
@@ -328,70 +405,14 @@ const Auth = () => {
       }}
     >
       <StyledCard sx={{ width: "400px", p: 3 }}>
-        {forgotPassword ? (
-          <>
-            <Typography variant="h5" align="center" sx={{ mb: 2 }}>
-              Forgot Password
-            </Typography>
-            <TextField
-              label="Email or Phone Number"
-              value={emailOrPhone}
-              onChange={(e) => setEmailOrPhone(e.target.value)}
-              fullWidth
-              margin="normal"
-              InputProps={{
-                startAdornment: <PersonIcon sx={{ mr: 1 }} />,
-              }}
-            />
-            <Button
-              onClick={handleAuthSubmit}
-              variant="contained"
-              color="primary"
-              sx={{ width: "100%", mt: 2 }}
-            >
-              Send OTP/Link
-            </Button>
-            <Divider sx={{ my: 2 }} />
-            <Typography variant="body2" align="center">
-              Remembered your password?
-              <Button
-                onClick={() => setForgotPassword(false)}
-                sx={{ ml: 1, textDecoration: "underline" }}
-              >
-                Login
-              </Button>
-            </Typography>
-          </>
-        ) : (
-          <>
-            {roleSelection ? (
-              <>
-                <Typography variant="h5" align="center" sx={{ mb: 2 }}>
-                  Select Your Role
-                </Typography>
-                <Button
-                  onClick={() => handleRoleSelection("admin")}
-                  variant="contained"
-                  color="primary"
-                  sx={{ width: "100%", mb: 1 }}
-                >
-                  Continue as Admin
-                </Button>
-                <Button
-                  onClick={() => handleRoleSelection("employee")}
-                  variant="contained"
-                  color="secondary"
-                  sx={{ width: "100%" }}
-                >
-                  Continue as Employee
-                </Button>
-              </>
-            ) : (
-              <>
-                <Typography variant="h4" align="center" sx={{ mb: 2 }}>
-                  {isRegistering ? "Register" : "Login"}
-                </Typography>
-                <CardContent>
+        <form onSubmit={handleAuthSubmit}>
+          {forgotPassword ? (
+            <>
+              {forgotPasswordStage === 1 && (
+                <>
+                  <Typography variant="h5" align="center" sx={{ mb: 2 }}>
+                    Forgot Password
+                  </Typography>
                   <TextField
                     label="Email or Phone Number"
                     value={emailOrPhone}
@@ -402,6 +423,204 @@ const Auth = () => {
                       startAdornment: <PersonIcon sx={{ mr: 1 }} />,
                     }}
                   />
+                  <Button
+                    onClick={handleSendResetVerification}
+                    variant="contained"
+                    color="primary"
+                    sx={{ width: "100%", mt: 2 }}
+                    disabled={isSendingVerification}
+                  >
+                    {isSendingVerification ? (
+                      <CircularProgress size={24} />
+                    ) : (
+                      "Send Verification"
+                    )}
+                  </Button>
+                  <Typography variant="body2" align="center" sx={{ mt: 2 }}>
+                    Remembered your password?
+                    <Button
+                      onClick={() => {
+                        dispatch(toggleForgotPassword());
+                      }}
+                      sx={{ ml: 1, textDecoration: "underline" }}
+                    >
+                      Login
+                    </Button>
+                  </Typography>
+                </>
+              )}
+
+              {forgotPasswordStage === 2 && (
+                <>
+                  <Typography variant="h5" align="center" sx={{ mb: 2 }}>
+                    Verify OTP
+                  </Typography>
+                  <TextField
+                    label="Enter OTP"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    fullWidth
+                    margin="normal"
+                  />
+                  <Button
+                    onClick={handleVerifyResetOtp}
+                    variant="contained"
+                    color="primary"
+                    sx={{ width: "100%", mt: 2 }}
+                    disabled={isVerifyingOTP}
+                  >
+                    {isVerifyingOTP ? (
+                      <CircularProgress size={24} />
+                    ) : (
+                      "Verify OTP"
+                    )}
+                  </Button>
+                  {verificationError && (
+                    <Typography color="error" align="center" sx={{ mt: 2 }}>
+                      {verificationError}
+                    </Typography>
+                  )}
+                </>
+              )}
+
+              {forgotPasswordStage === 3 && (
+                <>
+                  <Typography variant="h5" align="center" sx={{ mb: 2 }}>
+                    Reset Password
+                  </Typography>
+                  <TextField
+                    label="New Password"
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={handleNewPasswordChange}
+                    fullWidth
+                    margin="normal"
+                    InputProps={{
+                      startAdornment: <LockIcon sx={{ mr: 1 }} />,
+                      endAdornment: (
+                        <Button
+                          onClick={handleToggleNewPasswordVisibility}
+                          sx={{ p: 0, mr: -2 }}
+                        >
+                          {showNewPassword ? <VisibilityOff /> : <Visibility />}
+                        </Button>
+                      ),
+                    }}
+                  />
+                  <TextField
+                    label="Confirm New Password"
+                    type={showConfirmNewPassword ? "text" : "password"}
+                    value={confirmNewPassword}
+                    onChange={handleConfirmNewPasswordChange}
+                    fullWidth
+                    margin="normal"
+                    InputProps={{
+                      startAdornment: <LockIcon sx={{ mr: 1 }} />,
+                      endAdornment: (
+                        <Button
+                          onClick={handleToggleConfirmNewPasswordVisibility}
+                          sx={{ p: 0, mr: -2 }}
+                        >
+                          {showConfirmNewPassword ? (
+                            <VisibilityOff />
+                          ) : (
+                            <Visibility />
+                          )}
+                        </Button>
+                      ),
+                    }}
+                  />
+                  <Button
+                    onClick={handleAuthSubmit}
+                    variant="contained"
+                    color="primary"
+                    sx={{ width: "100%", mt: 2 }}
+                  >
+                    Reset Password
+                  </Button>
+                </>
+              )}
+            </>
+          ) : isRegistering ? (
+            <>
+              {registrationStage === 1 && (
+                <>
+                  <Typography variant="h5" align="center" sx={{ mb: 2 }}>
+                    Register
+                  </Typography>
+                  <TextField
+                    label="Email or Phone Number"
+                    value={emailOrPhone}
+                    onChange={(e) => setEmailOrPhone(e.target.value)}
+                    fullWidth
+                    margin="normal"
+                    InputProps={{
+                      startAdornment: <PersonIcon sx={{ mr: 1 }} />,
+                    }}
+                  />
+                  <Button
+                    onClick={handleSendVerification}
+                    variant="contained"
+                    color="primary"
+                    sx={{ width: "100%", mt: 2 }}
+                    disabled={isSendingVerification}
+                  >
+                    {isSendingVerification ? (
+                      <CircularProgress size={24} />
+                    ) : (
+                      "Send Verification"
+                    )}
+                  </Button>
+                  <Typography variant="body2" align="center" sx={{ mt: 2 }}>
+                    Already have an account?
+                    <Button
+                      onClick={() => dispatch(toggleRegistering())}
+                      sx={{ ml: 1, textDecoration: "underline" }}
+                    >
+                      Login
+                    </Button>
+                  </Typography>
+                </>
+              )}
+
+              {registrationStage === 2 && (
+                <>
+                  <Typography variant="h5" align="center" sx={{ mb: 2 }}>
+                    Verify OTP
+                  </Typography>
+                  <TextField
+                    label="Enter OTP"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    fullWidth
+                    margin="normal"
+                  />
+                  <Button
+                    onClick={handleVerifyOtp}
+                    variant="contained"
+                    color="primary"
+                    sx={{ width: "100%", mt: 2 }}
+                    disabled={isVerifyingOTP}
+                  >
+                    {isVerifyingOTP ? (
+                      <CircularProgress size={24} />
+                    ) : (
+                      "Verify OTP"
+                    )}
+                  </Button>
+                  {verificationError && (
+                    <Typography color="error" align="center" sx={{ mt: 2 }}>
+                      {verificationError}
+                    </Typography>
+                  )}
+                </>
+              )}
+
+              {registrationStage === 3 && (
+                <>
+                  <Typography variant="h5" align="center" sx={{ mb: 2 }}>
+                    Set Password
+                  </Typography>
                   <TextField
                     label="Password"
                     type={showPassword ? "text" : "password"}
@@ -416,176 +635,155 @@ const Auth = () => {
                           onClick={handleTogglePasswordVisibility}
                           sx={{ p: 0, mr: -2 }}
                         >
-                          {showPassword ? <Visibility Off /> : <Visibility />}
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
                         </Button>
                       ),
                     }}
                   />
-                  {isRegistering && password && (
-                    <Typography
-                      variant="caption"
-                      color={passwordValidationMessage ? "error" : "green"}
-                    >
-                      Password Strength:{" "}
-                      {passwordValidationMessage
-                        ? `Weak - ${passwordValidationMessage}`
-                        : "Strong"}
-                    </Typography>
-                  )}
-                  {isRegistering && (
-                    <>
-                      <TextField
-                        label="Confirm Password"
-                        type={showConfirmPassword ? "text" : "password"}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        fullWidth
-                        margin="normal"
-                        InputProps={{
-                          startAdornment: <LockIcon sx={{ mr: 1 }} />,
-                          endAdornment: (
-                            <Button
-                              onClick={handleToggleConfirmPasswordVisibility}
-                              sx={{ p: 0, mr: -2 }}
-                            >
-                              {showConfirmPassword ? (
-                                <VisibilityOff />
-                              ) : (
-                                <Visibility />
-                              )}
-                            </Button>
-                          ),
-                        }}
-                      />
-                      {otpSent && (
-                        <>
-                          <TextField
-                            label="Enter OTP"
-                            value={otp}
-                            onChange={(e) => setOtp(e.target.value)}
-                            fullWidth
-                            margin="normal"
-                          />
-                          <Button
-                            onClick={handleResendOtp}
-                            disabled={isResendDisabled}
-                            sx={{ mt: 1, width: "100%" }}
-                          >
-                            Resend OTP {otpTimer > 0 && `(${otpTimer}s)`}
-                          </Button>
-                          <Box sx={{ mt: 2 }}>
-                            <Button
-                              onClick={handleAuthSubmit}
-                              variant="contained"
-                              color="primary"
-                              sx={{ width: "100%" }}
-                              disabled={
-                                !otp || !otpSent || loadingOtpVerification
-                              }
-                            >
-                              {loadingOtpVerification ? (
-                                <CircularProgress size={24} />
-                              ) : (
-                                "Verify OTP"
-                              )}
-                            </Button>
-                          </Box>
-                        </>
-                      )}
-                    </>
-                  )}
-                  {error && <Typography color="error">{error}</Typography>}
+                  <TextField
+                    label="Confirm Password"
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={handleConfirmPasswordChange}
+                    fullWidth
+                    margin="normal"
+                    InputProps={{
+                      startAdornment: <LockIcon sx={{ mr: 1 }} />,
+                      endAdornment: (
+                        <Button
+                          onClick={handleToggleConfirmPasswordVisibility}
+                          sx={{ p: 0, mr: -2 }}
+                        >
+                          {showConfirmPassword ? (
+                            <VisibilityOff />
+                          ) : (
+                            <Visibility />
+                          )}
+                        </Button>
+                      ),
+                    }}
+                  />
                   <Button
                     onClick={handleAuthSubmit}
                     variant="contained"
                     color="primary"
-                    sx={{
-                      width: "100%",
-                      mt: 2,
-                      "&:hover": { backgroundColor: "#1976d2" },
-                    }}
-                    disabled={loading || (isRegistering && otpSent && !otp)} // Disable if loading or OTP not entered
+                    sx={{ width: "100%", mt: 2 }}
                   >
-                    {loading ? (
-                      <CircularProgress size={24} />
-                    ) : isRegistering ? (
-                      otpSent ? (
-                        "Verify OTP"
-                      ) : (
-                        "Register"
-                      )
-                    ) : (
-                      "Login"
-                    )}
+                    Register
                   </Button>
-                  <Divider sx={{ my: 2 }} />
-                  <Typography variant="body2" align="center">
-                    {isRegistering
-                      ? "Already have an account?"
-                      : "Don't have an account?"}
-                    <Button
-                      onClick={() => {
-                        dispatch(toggleRegistering());
-                      }}
-                      sx={{ ml: 1, textDecoration: "underline" }}
-                    >
-                      {isRegistering ? "Login" : "Register"}
-                    </Button>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {roleSelection ? (
+                <>
+                  <Typography variant="h5" align="center" sx={{ mb: 2 }}>
+                    Select Your Role
                   </Typography>
-                  {!isRegistering && (
+                  <Button
+                    onClick={() => handleRoleSelection("admin")}
+                    variant="contained"
+                    color="primary"
+                    sx={{ width: "100%", mb: 1 }}
+                  >
+                    Continue as Admin
+                  </Button>
+                  <Button
+                    onClick={() => handleRoleSelection("employee")}
+                    variant="contained"
+                    color="secondary"
+                    sx={{ width: "100%" }}
+                  >
+                    Continue as Employee
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Typography variant="h4" align="center" sx={{ mb: 2 }}>
+                    Login
+                  </Typography>
+                  <CardContent>
+                    <TextField
+                      label="Email or Phone Number"
+                      value={emailOrPhone}
+                      onChange={(e) => setEmailOrPhone(e.target.value)}
+                      fullWidth
+                      margin="normal"
+                      InputProps={{
+                        startAdornment: <PersonIcon sx={{ mr: 1 }} />,
+                      }}
+                    />
+                    <TextField
+                      label="Password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={handlePasswordChange}
+                      fullWidth
+                      margin="normal"
+                      InputProps={{
+                        startAdornment: <LockIcon sx={{ mr: 1 }} />,
+                        endAdornment: (
+                          <Button
+                            onClick={handleTogglePasswordVisibility}
+                            sx={{ p: 0, mr: -2 }}
+                          >
+                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                          </Button>
+                        ),
+                      }}
+                    />
                     <Button
-                      onClick={handleForgotPassword}
-                      sx={{ mt: 2, textDecoration: "underline", color: "blue" }}
+                      onClick={handleAuthSubmit}
+                      variant="contained"
+                      color="primary"
+                      sx={{ width: "100%", mt: 2 }}
+                      disabled={loading}
                     >
-                      Forgot Password?
+                      {loading ? <CircularProgress size={24} /> : "Login"}
                     </Button>
-                  )}
-                </CardContent>
-              </>
-            )}
-          </>
-        )}
-        {forgotPassword && (
-          <>
-            <TextField
-              label="Enter New Password"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              fullWidth
-              margin="normal"
-            />
-            <TextField
-              label="Confirm New Password"
-              type="password"
-              value={confirmNewPassword}
-              onChange={(e) => setConfirmNewPassword(e.target.value)}
-              fullWidth
-              margin="normal"
-            />
-            <Button
-              onClick={handleResetPassword}
-              variant="contained"
-              color="primary"
-              sx={{ width: "100%", mt: 2 }}
-            >
-              Change Password
-            </Button>
-          </>
-        )}
-        <Snackbar
-          open={snackbarOpen}
-          autoHideDuration={6000}
-          onClose={handleSnackbarClose}
-        >
-          <Alert
-            onClose={handleSnackbarClose}
-            severity={error ? "error" : "success"}
+                    <Divider sx={{ my: 2 }} />
+                    <Typography variant="body2" align="center">
+                      Don't have an account?
+                      <Button
+                        onClick={() => {
+                          dispatch(toggleRegistering());
+                        }}
+                        sx={{ ml: 1, textDecoration: "underline" }}
+                      >
+                        Register
+                      </Button>
+                    </Typography>
+                    <Typography variant="body2" align="center" sx={{ mt: 2 }}>
+                      <Button
+                        onClick={() => {
+                          dispatch(toggleForgotPassword());
+                        }}
+                        sx={{ textDecoration: "underline" }}
+                      >
+                        Forgot your password?
+                      </Button>
+                    </Typography>
+                  </CardContent>
+                </>
+              )}
+            </>
+          )}
+          <Snackbar
+            open={snackbarOpen}
+            autoHideDuration={6000}
+            onClose={() => setSnackbarOpen(false)}
           >
-            {error || snackbarMessage}
-          </Alert>
-        </Snackbar>
+            <Alert
+              onClose={() => setSnackbarOpen(false)}
+              severity={error ? "error" : "success"}
+            >
+              {error || snackbarMessage}
+            </Alert>
+          </Snackbar>
+        </form>
       </StyledCard>
+      <div id="recaptcha-container"></div>
     </Box>
   );
 };

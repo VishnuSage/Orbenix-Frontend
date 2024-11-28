@@ -13,19 +13,52 @@ const initialState = {
   },
 };
 
-// Async thunk to fetch all data
-export const fetchAllData = createAsyncThunk(
-  "performance/fetchAllData",
+// Async thunk to fetch all training data
+export const fetchTrainingData = createAsyncThunk(
+  "performance/fetchTrainingData",
   async (_, { rejectWithValue }) => {
     try {
-      const performanceResponse = await allApi.fetchAllPerformance(); // Adjusted API call
-      const trainingResponse = await allApi.fetchAllTraining(); // Adjusted API call
-      return {
-        performance: performanceResponse,
-        training: trainingResponse,
-      };
+      const response = await allApi.fetchAllTraining(); // Adjusted API call
+      console.log("Training Data Response:", response); // Log the response
+      return response;
     } catch (error) {
-      return rejectWithValue(error.response.data || "Failed to fetch data");
+      return rejectWithValue(
+        typeof error.response.data === "string"
+          ? error.response.data
+          : "Failed to fetch training data"
+      );
+    }
+  }
+);
+
+// Async thunk to fetch all performance data
+export const fetchPerformanceData = createAsyncThunk(
+  "performance/fetchPerformanceData",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await allApi.fetchAllPerformance(); // Adjusted API call
+      return response;
+    } catch (error) {
+      return rejectWithValue(
+        error.response.data || "Failed to fetch performance data"
+      );
+    }
+  }
+);
+
+// Async thunk to fetch performance data by employee
+export const fetchPerformanceDataByEmployee = createAsyncThunk(
+  "performance/fetchPerformanceDataByEmployee",
+  async (empId, { rejectWithValue }) => {
+    try {
+      const response = await allApi.fetchPerformanceDataByEmployee(empId); // Adjusted API call
+      console.log("Performance Data Response:", response); // Log the response
+      return response;
+    } catch (error) {
+      return rejectWithValue(
+        error.response.data ||
+          `Failed to fetch performance data for employee with id ${empId}`
+      );
     }
   }
 );
@@ -99,7 +132,9 @@ export const addTrainingDetails = createAsyncThunk(
       return response;
     } catch (error) {
       return rejectWithValue(
-        error.response.data || "Failed to add training details"
+        typeof error.response.data === "string"
+          ? error.response.data
+          : "Failed to add training details"
       );
     }
   }
@@ -108,14 +143,12 @@ export const addTrainingDetails = createAsyncThunk(
 // Async thunk to update training details
 export const updateTrainingDetails = createAsyncThunk(
   "performance/updateTrainingDetails",
-  async (updatedTraining, { rejectWithValue }) => {
+  async (trainingData, { rejectWithValue }) => {
     try {
-      const response = await allApi.updateTrainingDetails(updatedTraining); // Adjusted API call
-      return response;
+      const response = await allApi.updateTrainingDetails(trainingData);
+      return response; // Return updated training data
     } catch (error) {
-      return rejectWithValue(
-        error.response.data || "Failed to update training details"
-      );
+      return rejectWithValue(error.response.data.message || "Update failed");
     }
   }
 );
@@ -123,13 +156,14 @@ export const updateTrainingDetails = createAsyncThunk(
 // Async thunk to delete training details
 export const deleteTrainingDetails = createAsyncThunk(
   "performance/deleteTrainingDetails",
-  async (id, { rejectWithValue }) => {
+  async (trainingId, { rejectWithValue }) => {
     try {
-      await allApi.deleteTrainingDetails(id); // Adjusted API call
-      return id; // Return the id for the reducer to remove it from the state
+      await allApi.deleteTrainingDetails(trainingId);
+      // Return the ID that was passed in
+      return { id: trainingId };
     } catch (error) {
       return rejectWithValue(
-        error.response.data || "Failed to delete training details"
+        error.response?.data?.message || "Failed to delete training details"
       );
     }
   }
@@ -151,17 +185,50 @@ const performanceSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchAllData.fulfilled, (state, action) => {
-        state.performanceData = action.payload.performance;
-        state.trainingData = action.payload.training;
+      // Fetch training data
+      .addCase(fetchTrainingData.fulfilled, (state, action) => {
+        state.trainingData = action.payload;
         state.isLoading = false;
         state.snackbar = {
           open: true,
-          message: "Data fetched successfully!",
+          message: "Training data fetched successfully!",
           severity: "success",
         };
       })
-      .addCase(fetchAllData.rejected, (state, action) => {
+      .addCase(fetchTrainingData.rejected, (state, action) => {
+        state.isLoading = false;
+        state.snackbar = {
+          open: true,
+          message: action.payload,
+          severity: "error",
+        };
+      })
+
+      // Fetch performance data
+      .addCase(fetchPerformanceData.fulfilled, (state, action) => {
+        state.performanceData = action.payload;
+        state.isLoading = false;
+        state.snackbar = {
+          open: true,
+          message: "Performance data fetched successfully!",
+          severity: "success",
+        };
+      })
+      .addCase(fetchPerformanceData.rejected, (state, action) => {
+        state.isLoading = false;
+        state.snackbar = {
+          open: true,
+          message: action.payload,
+          severity: "error",
+        };
+      })
+
+      // Fetch performance data by employee
+      .addCase(fetchPerformanceDataByEmployee.fulfilled, (state, action) => {
+        state.performanceData = action.payload; // Ensure you set the data correctly
+        state.isLoading = false;
+      })
+      .addCase(fetchPerformanceDataByEmployee.rejected, (state, action) => {
         state.isLoading = false;
         state.snackbar = {
           open: true,
@@ -245,15 +312,10 @@ const performanceSlice = createSlice({
       })
       .addCase(updateTrainingDetails.fulfilled, (state, action) => {
         const index = state.trainingData.findIndex(
-          (item) => item.id === action.payload.id
+          (td) => td.trainingId === action.payload.trainingId
         );
         if (index !== -1) {
-          state.trainingData[index] = action.payload;
-          state.snackbar = {
-            open: true,
-            message: "Training details updated successfully!",
-            severity: "success",
-          };
+          state.trainingData[index] = action.payload; // Update training data in state
         }
       })
       .addCase(updateTrainingDetails.rejected, (state, action) => {
@@ -264,20 +326,31 @@ const performanceSlice = createSlice({
         };
       })
       .addCase(deleteTrainingDetails.fulfilled, (state, action) => {
-        const id = action.payload;
-        state.trainingData = state.trainingData.filter(
-          (item) => item.id !== id
-        );
-        state.snackbar = {
-          open: true,
-          message: "Training details deleted successfully!",
-          severity: "success",
-        };
+        if (action.payload && action.payload.id) {
+          const filteredData = state.trainingData.filter(
+            (item) => item.trainingId !== action.payload.id
+          );
+          state.trainingData = filteredData;
+          state.snackbar = {
+            open: true,
+            message: "Training details deleted successfully",
+            severity: "success",
+          };
+        } else {
+          state.snackbar = {
+            open: true,
+            message: "Error: Invalid response from server",
+            severity: "error",
+          };
+        }
       })
       .addCase(deleteTrainingDetails.rejected, (state, action) => {
         state.snackbar = {
           open: true,
-          message: action.payload,
+          message:
+            action.error?.message ||
+            action.payload ||
+            "Failed to delete training details",
           severity: "error",
         };
       });

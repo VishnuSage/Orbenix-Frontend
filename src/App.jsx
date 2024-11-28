@@ -1,7 +1,10 @@
 import React from "react";
-import { PersistGate } from "redux-persist/integration/react";
-import { store, persistor } from "./redux/store";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 import DashboardLayout from "./components/DashboardLayout";
 import PayrollPage from "./pages/PayrollPage.jsx";
 import AttendanceLeavePage from "./pages/AttendanceLeavePage"; // Merged Attendance and Leave Management
@@ -19,38 +22,122 @@ import AdminAttendancePage from "./pages/AdminAttendancePage.jsx";
 import AdminPerformanceManagementPage from "./pages/AdminPerformanceManagementPage.jsx";
 import AdminTimeTrackingPage from "./pages/AdminTimeTrackingPage.jsx";
 import AdminAnnouncementsPage from "./pages/AdminAnnouncementsPage.jsx";
+import { useSelector } from "react-redux"; // Import useSelector
 
 function App() {
+  const isLoggedIn = useSelector((state) => state.auth.isLoggedIn); // Get isLoggedIn from state
+  console.log("Is user logged in?", isLoggedIn); // Debugging log
+
   return (
     <NotificationProvider>
-      <PersistGate loading={<div>Loading...</div>} persistor={persistor}>
-        <Router>
-          <Routes>
-            {/* Employee Dashboard with sidebar and content */}
-            <Route path="/" element={<DashboardLayout />}>
-              <Route path="payroll" element={<PayrollPage />} />
-              <Route path="attendance-leave" element={<AttendanceLeavePage />} />
-              <Route path="performance-training" element={<PerformanceTrainingPage />} />
-              <Route path="profile-settings" element={<ProfileSettingsPage />} />
-              <Route path="time-tracking" element={<TimeTrackingPage />} />
-              <Route path="announcements-help" element={<AnnouncementsHelpPage />} />
-            </ Route>
-            {/* Admin Dashboard routes */}
-            <Route path="/admin" element={<AdminDashboardLayout />}>
-              <Route path="employees" element={<EmployeeManagementPage />} />
-              <Route path="admin-payroll" element={<AdminPayrollPage />} />
-              <Route path="attendance" element={<AdminAttendancePage />} />
-              <Route path="performance" element={<AdminPerformanceManagementPage />} />
-              <Route path="time-management" element={<AdminTimeTrackingPage />} />
-              <Route path="announcements" element={<AdminAnnouncementsPage />} />
-              {/* Add other admin routes here, e.g., attendance, performance, etc. */}
-            </Route>
-            {/* Other pages */}
-            <Route path="/auth" element={<Auth />} />
-            <Route path="*" element={<NotFound />} /> {/* Catch-all route for 404 */}
-          </Routes>
-        </Router>
-      </PersistGate>
+      <Router>
+        <Routes>
+          {/* Employee Dashboard with sidebar and content */}
+          <Route
+            path="/"
+            element={isLoggedIn ? <DashboardLayout /> : <Navigate to="/auth" />}
+          >
+            <Route
+              path="/payroll"
+              element={isLoggedIn ? <PayrollPage /> : <Navigate to="/auth" />}
+            />
+            <Route
+              path="attendance-leave"
+              element={
+                isLoggedIn ? <AttendanceLeavePage /> : <Navigate to="/auth" />
+              }
+            />
+            <Route
+              path="performance-training"
+              element={
+                isLoggedIn ? (
+                  <PerformanceTrainingPage />
+                ) : (
+                  <Navigate to="/auth" />
+                )
+              }
+            />
+            <Route
+              path="profile-settings"
+              element={
+                isLoggedIn ? <ProfileSettingsPage /> : <Navigate to="/auth" />
+              }
+            />
+            <Route
+              path="time-tracking"
+              element={
+                isLoggedIn ? <TimeTrackingPage /> : <Navigate to="/auth" />
+              }
+            />
+            <Route
+              path="announcements-help"
+              element={
+                isLoggedIn ? <AnnouncementsHelpPage /> : <Navigate to="/auth" />
+              }
+            />
+          </Route>
+          {/* Admin Dashboard routes */}
+          <Route
+            path="/admin"
+            element={
+              isLoggedIn ? <AdminDashboardLayout /> : <Navigate to="/auth" />
+            }
+          >
+            <Route
+              path="employees"
+              element={
+                isLoggedIn ? (
+                  <EmployeeManagementPage />
+                ) : (
+                  <Navigate to="/auth" />
+                )
+              }
+            />
+            <Route
+              path="admin-payroll"
+              element={
+                isLoggedIn ? <AdminPayrollPage /> : <Navigate to="/auth" />
+              }
+            />
+            <Route
+              path="attendance"
+              element={
+                isLoggedIn ? <AdminAttendancePage /> : <Navigate to="/auth" />
+              }
+            />
+            <Route
+              path="performance"
+              element={
+                isLoggedIn ? (
+                  <AdminPerformanceManagementPage />
+                ) : (
+                  <Navigate to="/auth" />
+                )
+              }
+            />
+            <Route
+              path="time-management"
+              element={
+                isLoggedIn ? <AdminTimeTrackingPage /> : <Navigate to="/auth" />
+              }
+            />
+            <Route
+              path="announcements"
+              element={
+                isLoggedIn ? (
+                  <AdminAnnouncementsPage />
+                ) : (
+                  <Navigate to="/auth" />
+                )
+              }
+            />
+          </Route>
+          {/* Other pages */}
+          <Route path="/auth" element={<Auth />} />
+          <Route path="*" element={<NotFound />} />{" "}
+          {/* Catch-all route for 404 */}
+        </Routes>
+      </Router>
     </NotificationProvider>
   );
 }

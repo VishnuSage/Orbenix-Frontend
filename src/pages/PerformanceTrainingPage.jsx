@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useNotificationContext } from "../components/NotificationContext"; // Import the context
+import { useNotificationContext } from "../components/NotificationContext";
 import PropTypes from "prop-types";
 import {
   Box,
@@ -26,7 +26,12 @@ import {
 } from "recharts";
 import InfoIcon from "@mui/icons-material/Info";
 import TrainingIcon from "@mui/icons-material/School";
-import { fetchAllData, setLoading } from "../redux/performanceSlice"; // Import fetchAllData and setLoading
+import {
+  fetchPerformanceDataByEmployee,
+  fetchPerformanceData,
+  fetchTrainingData,
+  setLoading,
+} from "../redux/performanceSlice";
 
 // RadarChart Component
 const PerformanceChart = ({ data }) => (
@@ -146,9 +151,14 @@ TrainingDetails.propTypes = {
 
 const PerformanceTrainingPage = () => {
   const dispatch = useDispatch();
-  const { performanceData, trainingData, isLoading } = useSelector(
-    (state) => state.performance
+  const { isLoading } = useSelector((state) => state.performance);
+
+  const performanceData = useSelector(
+    (state) => state.performance.performanceData
   );
+  const trainingData = useSelector((state) => state.performance.trainingData);
+
+  const empId = useSelector((state) => state.auth.empId); // Access empId from the Redux state
 
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
@@ -162,12 +172,15 @@ const PerformanceTrainingPage = () => {
 
   const { addNotifications } = useNotificationContext();
 
-  // Existing useEffect for fetching data
+  // useEffect to fetch performance and training data
   useEffect(() => {
     const fetchData = async () => {
       dispatch(setLoading(true));
       try {
-        await dispatch(fetchAllData()); // Use fetchAllData
+        // Fetch performance data by employee ID
+        await dispatch(fetchPerformanceDataByEmployee(empId));
+        // Fetch general training data
+        await dispatch(fetchTrainingData());
         dispatch(setLoading(false)); // Set loading to false after data is fetched
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -178,19 +191,19 @@ const PerformanceTrainingPage = () => {
     };
 
     fetchData();
-  }, [dispatch]); // Removed addNotifications and trainingData from this effect
+  }, [dispatch, empId]); // Added empId to dependency array
 
-  // New useEffect for handling notifications
+  // useEffect for handling notifications
   useEffect(() => {
     const notifiedIds = new Set(); // To keep track of notified training IDs
     if (trainingData.length > 0) {
       for (const training of trainingData) {
-        if (training.id && !notifiedIds.has(training.id)) {
-          notifiedIds.add(training.id); // Mark this training as notified
+        if (training.trainingId && !notifiedIds.has(training.trainingId)) {
+          notifiedIds.add(training.trainingId); // Mark this training as notified
           const newTrainingNotification = {
-            id: training.id,
+            id: training.trainingId, // Use trainingId as the unique identifier
             text: `New training session scheduled: ${training.description}`,
-            link: `/training-details/${training.id}`,
+            link: `/training-details/${training.trainingId}`, // Link to training details
           };
           addNotifications([newTrainingNotification]);
         }
