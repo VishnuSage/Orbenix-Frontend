@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import Logo from "../assets/orbenix-logo.png"; // Adjust the path to your logo file
 import {
   Box,
   Button,
@@ -402,6 +403,7 @@ const Auth = () => {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
+        padding: "40px",
       }}
     >
       <StyledCard sx={{ width: "400px", p: 3 }}>
@@ -545,9 +547,15 @@ const Auth = () => {
             <>
               {registrationStage === 1 && (
                 <>
-                  <Typography variant="h5" align="center" sx={{ mb: 2 }}>
-                    Register
-                  </Typography>
+                  <Box
+                    sx={{ display: "flex", justifyContent: "center", mb: 2 }}
+                  >
+                    <img
+                      src={Logo}
+                      alt="Logo"
+                      style={{ width: "150px", height: "auto" }}
+                    />
+                  </Box>
                   <TextField
                     label="Phone Number"
                     value={emailOrPhone}
@@ -700,9 +708,15 @@ const Auth = () => {
                 </>
               ) : (
                 <>
-                  <Typography variant="h4" align="center" sx={{ mb: 2 }}>
-                    Login
-                  </Typography>
+                  <Box
+                    sx={{ display: "flex", justifyContent: "center", mb: 2 }}
+                  >
+                    <img
+                      src={Logo}
+                      alt="Logo"
+                      style={{ width: "150px", height: "auto" }}
+                    />
+                  </Box>
                   <CardContent>
                     <TextField
                       label="Email or Phone Number"
