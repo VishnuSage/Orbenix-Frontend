@@ -48,7 +48,7 @@ const AdminSidebar = () => {
         variant="h6"
         sx={{ color: "#ffffff", textAlign: "center", mb: 2, mt: 1 }}
       >
-        Admin Dashboard
+        Orbenix
       </Typography>
       <Divider sx={{ backgroundColor: "#666666", mb: 1 }} />{" "}
       {/* Divider added here */}

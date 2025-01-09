@@ -49,7 +49,7 @@ const Sidebar = () => {
         variant="h6"
         sx={{ color: "#ffffff", textAlign: "center", mb: 2, mt: 1 }}
       >
-        Financity
+        Orbenix
       </Typography>
       <Divider sx={{ backgroundColor: "#666666", mb: 2 }} />{" "}
       {/* Divider added here */}
