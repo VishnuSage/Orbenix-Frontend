@@ -43,7 +43,7 @@ import {
   setNotification,
   selectPayroll,
   fetchAllPayrolls,
-  fetchLoanRequests,
+  fetchLoanRequestsByEmpId,
   resetLoanForm,
 } from "../redux/payrollSlice";
 import { useNotificationContext } from "../components/NotificationContext";
@@ -81,7 +81,7 @@ const PayrollPage = () => {
 
   useEffect(() => {
     dispatch(fetchAllPayrolls());
-    dispatch(fetchLoanRequests());
+    dispatch(fetchLoanRequestsByEmpId());
   }, [dispatch]);
 
   useEffect(() => {

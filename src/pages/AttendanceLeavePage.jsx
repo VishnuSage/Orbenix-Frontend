@@ -83,19 +83,12 @@ const AttendanceLeavePage = () => {
   const {
     attendanceData,
     loading,
-    leaveRequests = [],
+
     successMessage,
     error,
   } = useSelector((state) => state.attendanceLeave);
 
   const empId = useSelector((state) => state.auth.empId); // Access empId from the Redux state
-
-  const [leaveRequest, setLeaveRequest] = useState({
-    type: "",
-    startDate: "",
-    endDate: "",
-    status: "Pending",
-  });
 
   const [submitting, setSubmitting] = useState(false);
   const [filterText, setFilterText] = useState("");
@@ -103,13 +96,55 @@ const AttendanceLeavePage = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarSeverity, setSnackbarSeverity] = useState("error");
+  const [leaveRequest, setLeaveRequest] = useState({
+    type: "",
+    startDate: "",
+    endDate: "",
+    status: "Pending",
+  });
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [leaveDetails, setLeaveDetails] = useState({ remainingDays: 0 });
 
   const { addNotifications } = useNotificationContext();
 
   useEffect(() => {
-    dispatch(fetchAttendanceData(empId)); // Fetch attendance data
-    dispatch(fetchLeaveRequestsData()); // Fetch leave requests
+    const fetchData = async () => {
+      try {
+        await dispatch(fetchAttendanceData(empId));
+        const response = await dispatch(fetchLeaveRequestsData(empId));
+
+        // Log the response to check its structure
+        console.log("Leave Requests Response:", response);
+
+        // Update leaveRequests state with the fetched data
+        setLeaveRequests(response.payload.leaveRequests || []);
+        // Update leaveDetails state with the fetched data
+        setLeaveDetails(response.payload.leaveDetails || { remainingDays: 0 });
+
+        // Log the updated state
+        console.log("Updated Leave Requests:", response.payload.leaveRequests);
+        console.log("Updated Leave Details:", response.payload.leaveDetails);
+
+        if (response.payload.message) {
+          setSnackbarMessage(response.payload.message);
+          setSnackbarSeverity("info");
+          setSnackbarOpen(true);
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        setSnackbarMessage("Failed to load data. Please try again.");
+        setSnackbarSeverity("error");
+        setSnackbarOpen(true);
+      }
+    };
+    fetchData();
   }, [dispatch, empId]);
+
+  // Log the leaveRequests and leaveDetails to see if they are being set correctly
+  useEffect(() => {
+    console.log("Leave Requests State:", leaveRequests);
+    console.log("Leave Details State:", leaveDetails);
+  }, [leaveRequests, leaveDetails]);
 
   useEffect(() => {
     if (successMessage) {
@@ -165,15 +200,29 @@ const AttendanceLeavePage = () => {
   const handleConfirmSubmit = async () => {
     setSubmitting(true);
     try {
-      await dispatch(
+      const newLeaveRequest = await dispatch(
         submitLeaveRequestData({
           ...leaveRequest,
-          employeeId: empId,
+          empId,
         })
       );
+
+      // Check if the new leave request is returned correctly
+      if (newLeaveRequest.payload) {
+        // Assuming newLeaveRequest.payload contains the new leave request
+        setLeaveRequests((prevRequests) => [
+          ...prevRequests,
+          {
+            ...newLeaveRequest.payload,
+            type: leaveRequest.type, // Ensure type is included
+            status: "Pending", // Set default status if not returned
+          },
+        ]);
+      }
+
       addNotifications([
         {
-          type: "info", // or "success", depending on how you want to categorize it
+          type: "info",
           text: `New leave request submitted by Employee ID: ${empId} for ${leaveRequest.type} from ${leaveRequest.startDate} to ${leaveRequest.endDate}.`,
         },
       ]);
@@ -215,17 +264,21 @@ const AttendanceLeavePage = () => {
     setFilterText(event.target.value);
   };
 
-  const filteredLeaveRequests = Array.isArray(leaveRequests)
-    ? leaveRequests.filter((leaveRequest) => {
-        return (
-          leaveRequest.type.toLowerCase().includes(filterText.toLowerCase()) ||
-          leaveRequest.startDate
-            .toLowerCase()
-            .includes(filterText.toLowerCase()) ||
-          leaveRequest.endDate.toLowerCase().includes(filterText.toLowerCase())
-        );
-      })
-    : [];
+  // Filter leave requests based on the filterText
+  const filteredLeaveRequests = leaveRequests.filter((leaveRequest) => {
+    const typeMatch =
+      leaveRequest.type &&
+      leaveRequest.type.toLowerCase().includes(filterText.toLowerCase());
+    const startDateMatch = moment(leaveRequest.startDate)
+      .format("YYYY-MM-DD")
+      .includes(filterText);
+    const endDateMatch = moment(leaveRequest.endDate)
+      .format("YYYY-MM-DD")
+      .includes(filterText);
+    return typeMatch || startDateMatch || endDateMatch;
+  });
+
+  console.log("Filtered Leave Requests:", filteredLeaveRequests);
 
   return (
     <Box sx={{ padding: 2 }}>
@@ -248,7 +301,8 @@ const AttendanceLeavePage = () => {
                 <SubHeading variant="h6" component="h2">
                   Attendance Calendar
                 </SubHeading>
-                {attendanceData.attendance.length === 0 ? (
+                {!attendanceData.attendance ||
+                attendanceData.attendance.length === 0 ? (
                   <Typography>No attendance data available.</Typography>
                 ) : (
                   <Calendar
@@ -280,7 +334,7 @@ const AttendanceLeavePage = () => {
               <CardContent>
                 <SubHeading variant="h6" component="h2">
                   Leave Request Form
-                </SubHeading>{" "}
+                </SubHeading>
                 <form onSubmit={(event) => event.preventDefault()}>
                   <FormControl fullWidth sx={{ marginBottom: 2 }}>
                     <InputLabel id="leave-type-label">Leave Type</InputLabel>
@@ -381,9 +435,7 @@ const AttendanceLeavePage = () => {
                   }}
                   sx={{ marginBottom: 2 }}
                 />
-                {filteredLeaveRequests.length === 0 ? (
-                  <Typography>No leave requests available.</Typography>
-                ) : (
+                {filteredLeaveRequests.length > 0 ? (
                   <TableContainer component={Paper} sx={{ marginBottom: 2 }}>
                     <Table>
                       <TableHead>
@@ -411,11 +463,19 @@ const AttendanceLeavePage = () => {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {filteredLeaveRequests.map((leaveRequest, index) => (
-                          <TableRow key={index}>
+                        {filteredLeaveRequests.map((leaveRequest) => (
+                          <TableRow key={leaveRequest.leaveRequestId}>
                             <TableCell>{leaveRequest.type}</TableCell>
-                            <TableCell>{leaveRequest.startDate}</TableCell>
-                            <TableCell>{leaveRequest.endDate}</TableCell>
+                            <TableCell>
+                              {moment(leaveRequest.startDate).format(
+                                "YYYY-MM-DD"
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {moment(leaveRequest.endDate).format(
+                                "YYYY-MM-DD"
+                              )}
+                            </TableCell>
                             <TableCell
                               sx={{
                                 color:
@@ -432,6 +492,8 @@ const AttendanceLeavePage = () => {
                       </TableBody>
                     </Table>
                   </TableContainer>
+                ) : (
+                  <Typography>No leave requests available.</Typography>
                 )}
               </CardContent>
             </Card>
@@ -440,7 +502,7 @@ const AttendanceLeavePage = () => {
           <Grid item xs={12}>
             <Card
               sx={{
-                bgcolor: "#f0f8 ff",
+                bgcolor: "#f0f8ff",
                 padding: 2,
                 borderRadius: 2,
                 boxShadow: 3,
@@ -458,10 +520,8 @@ const AttendanceLeavePage = () => {
                     component="span"
                     sx={{ fontWeight: "bold", marginRight: 2 }}
                   >
-                    {attendanceData.remainingLeave[empId] !==
-                    undefined
-                      ? attendanceData.remainingLeave[empId]
-                      : 0}
+                    {leaveDetails.remainingDays}{" "}
+                    {/* Accessing remaining days from leaveDetails */}
                   </Typography>
                   <Typography
                     variant="body1"
@@ -480,8 +540,7 @@ const AttendanceLeavePage = () => {
                   <LinearProgress
                     variant="determinate"
                     value={
-                      (attendanceData.remainingLeave[empId] / 30) *
-                      100 // Assuming 30 is the total leave days for this example
+                      (leaveDetails.remainingDays / 30) * 100 // Assuming 30 is the total leave days for this example
                     }
                     sx={{ height: 10, borderRadius: 5 }}
                   />

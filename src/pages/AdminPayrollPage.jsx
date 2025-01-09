@@ -18,6 +18,10 @@ import {
   Tabs,
   Tab,
   IconButton,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import TablePagination from "@mui/material/TablePagination";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -29,9 +33,9 @@ import SearchIcon from "@mui/icons-material/Search";
 import InputAdornment from "@mui/material/InputAdornment";
 import { useDispatch, useSelector } from "react-redux";
 import {
-  addPayrollData,
-  updatePayrollData,
-  deletePayrollData,
+  createPayroll,
+  updatePayroll,
+  deletePayroll,
   setNotification,
   fetchAllPayrolls,
   addLoanRequest,
@@ -39,7 +43,9 @@ import {
   selectLoanRequests,
   filterPayrollData,
   searchPayrollData,
+  setSelectedPayroll,
 } from "../redux/payrollSlice";
+import { fetchEmployees } from "../redux/employeeSlice";
 import { useNotificationContext } from "../components/NotificationContext"; // Adjust the path as necessary
 
 const AdminPayrollPage = () => {
@@ -47,6 +53,7 @@ const AdminPayrollPage = () => {
   const payrollData = useSelector(
     (state) => state.payroll.payrollData.allPayrolls
   );
+  const employees = useSelector((state) => state.employees.employees);
   const loanRequests = useSelector(selectLoanRequests);
   const filteredPayrollData = useSelector(
     (state) => state.payroll.filteredHistory
@@ -71,12 +78,41 @@ const AdminPayrollPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
   const [notification, setNotification] = useState({ message: "", type: "" });
+  const [selectedMonth, setSelectedMonth] = useState("");
 
   const { addNotifications } = useNotificationContext(); // Use the context to get the addNotifications function
 
   useEffect(() => {
-    dispatch(fetchAllPayrolls(empId));
-  }, [dispatch, empId]);
+    dispatch(fetchAllPayrolls());
+  }, [dispatch]);
+
+  useEffect(() => {
+    dispatch(fetchEmployees()); // Fetch employees initially
+  }, [dispatch]);
+
+  useEffect(() => {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = String(today.getMonth() + 1).padStart(2, "0"); // Pad with leading zero if needed
+    const currentMonthString = `${currentYear}-${currentMonth}`;
+
+    setFromMonth(currentMonthString);
+    setToMonth(currentMonthString);
+
+    // Fetch payroll data for the current month
+    dispatch(
+      filterPayrollData({
+        fromMonth: currentMonthString,
+        toMonth: currentMonthString,
+      })
+    );
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (activeTab === 1) {
+      dispatch(filterPayrollData({ fromMonth, toMonth }));
+    }
+  }, [dispatch, fromMonth, toMonth, activeTab, payrollData]);
 
   useEffect(() => {
     dispatch(filterPayrollData({ fromMonth, toMonth })); // Dispatch filter action
@@ -86,20 +122,28 @@ const AdminPayrollPage = () => {
     dispatch(searchPayrollData(employeeSearchQuery)); // Dispatch search action
   }, [dispatch, employeeSearchQuery]);
 
+  useEffect(() => {
+    if (editingId) {
+      setActiveTab(0);
+    }
+  }, [editingId]);
+
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
   };
 
   const handleAddPayroll = () => {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = String(today.getMonth() + 1).padStart(2, "0");
+
     const newPayroll = {
       empId,
       name,
-      month: "2023-09",
+      month: `${currentYear}-${currentMonth}`,
       salary,
       benefits,
-      netPay: String(
-        Number(salary.replace(/,/g, "")) + Number(benefits.replace(/,/g, ""))
-      ),
+      netPay: String(Number(salary) + Number(benefits)),
       deductionsBreakdown: {
         tax,
         healthInsurance,
@@ -107,13 +151,17 @@ const AdminPayrollPage = () => {
         loan,
       },
     };
-    dispatch(addPayrollData(newPayroll));
-    resetFields();
+    dispatch(createPayroll(newPayroll));
+    resetFields(); // Reset fields after adding
+    setPage(0);
   };
 
-  const handleEditPayroll = (id) => {
-    const payrollToEdit = payrollData.find((payroll) => payroll.id === id);
+  const handleEditPayroll = (_id) => {
+    console.log("_id parameter:", _id);
+    const payrollToEdit = payrollData.find((payroll) => payroll._id === _id);
+    console.log("Payroll to edit:", payrollToEdit);
     if (payrollToEdit) {
+      console.log("Payroll found, updating state");
       setEmpId(payrollToEdit.empId);
       setName(payrollToEdit.name);
       setSalary(payrollToEdit.salary);
@@ -122,24 +170,24 @@ const AdminPayrollPage = () => {
       setHealthInsurance(payrollToEdit.deductionsBreakdown.healthInsurance);
       setRetirement(payrollToEdit.deductionsBreakdown.retirement);
       setLoan(payrollToEdit.deductionsBreakdown.loan);
-      setEditingId(id);
+      setEditingId(_id);
+      setSelectedMonth(payrollToEdit.month);
       setActiveTab(0);
+      dispatch(setSelectedPayroll(payrollToEdit));
     } else {
-      console.error("Payroll not found for ID:", id);
+      console.error("Payroll not found for ID:", _id);
     }
   };
 
   const handleUpdatePayroll = () => {
     const updatedPayroll = {
-      id: editingId,
+      _id: editingId,
       empId,
       name,
-      month: "2023-09",
+      month: selectedMonth,
       salary,
       benefits,
-      netPay: String(
-        Number(salary.replace(/,/g, "")) + Number(benefits.replace(/,/g, ""))
-      ),
+      netPay: String(Number(salary) + Number(benefits)),
       deductionsBreakdown: {
         tax,
         healthInsurance,
@@ -147,12 +195,21 @@ const AdminPayrollPage = () => {
         loan,
       },
     };
-    dispatch(updatePayrollData(updatedPayroll));
-    resetFields();
+    dispatch(updatePayroll(updatedPayroll));
+    resetFields(); // Reset fields after updating
+    setPage(0);
   };
 
   const handleDeletePayroll = (id) => {
-    dispatch(deletePayrollData(id));
+    const payrollToDelete = payrollData.find((payroll) => payroll._id === id);
+    if (payrollToDelete) {
+      dispatch(
+        deletePayroll({
+          _id: id,
+        })
+      );
+      setPage(0);
+    }
   };
 
   const resetFields = () => {
@@ -164,7 +221,7 @@ const AdminPayrollPage = () => {
     setHealthInsurance("");
     setRetirement("");
     setLoan("");
-    setEditingId(null);
+    setEditingId(null); // Reset editingId to null
   };
 
   const handleFilterClick = () => {
@@ -172,9 +229,19 @@ const AdminPayrollPage = () => {
   };
 
   const handleResetFilters = () => {
-    setFromMonth("");
-    setToMonth("");
-    dispatch(filterPayrollData({ fromMonth: "", toMonth: "" })); // Reset filter action
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = String(today.getMonth() + 1).padStart(2, "0"); // Pad with leading zero if needed
+    const currentMonthString = `${currentYear}-${currentMonth}`;
+
+    setFromMonth(currentMonthString);
+    setToMonth(currentMonthString);
+    dispatch(
+      filterPayrollData({
+        fromMonth: currentMonthString,
+        toMonth: currentMonthString,
+      })
+    );
   };
 
   const handleChangePage = (event, newPage) => {
@@ -197,28 +264,22 @@ const AdminPayrollPage = () => {
 
   const exportToExcel = () => {
     const dataToExport = filteredPayrollData.map((payroll) => {
-      const tax = Number(
-        payroll.deductionsBreakdown.tax.replace(/,/g, "") || 0
-      );
-      const healthInsurance = Number(
-        payroll.deductionsBreakdown.healthInsurance.replace(/,/g, "") || 0
-      );
-      const retirement = Number(
-        payroll.deductionsBreakdown.retirement.replace(/,/g, "") || 0
-      );
-      const loan = Number(
-        payroll.deductionsBreakdown.loan.replace(/,/g, "") || 0
-      );
-
-      const totalDeductions = tax + healthInsurance + retirement + loan;
+      const month = new Date(payroll.month);
+      const formattedMonth = `${month.getFullYear()}-${String(
+        month.getMonth() + 1
+      ).padStart(2, "0")}`;
 
       return {
         EmployeeId: payroll.empId,
         EmployeeName: payroll.name,
-        Month: payroll.month,
+        Month: formattedMonth,
         Salary: payroll.salary,
         Benefits: payroll.benefits,
-        TotalDeductions: totalDeductions,
+        TotalDeductions:
+          payroll.deductionsBreakdown.tax +
+          payroll.deductionsBreakdown.healthInsurance +
+          payroll.deductionsBreakdown.retirement +
+          payroll.deductionsBreakdown.loan,
         NetPay: payroll.netPay,
       };
     });
@@ -277,6 +338,21 @@ const AdminPayrollPage = () => {
     loanPage * loanRowsPerPage + loanRowsPerPage
   );
 
+  const handleEmpIdChange = (e) => {
+    const selectedEmpId = e.target.value;
+    setEmpId(selectedEmpId);
+
+    // Find the employee name based on the selected employee ID
+    const selectedEmployee = employees.find(
+      (employee) => employee.empId === selectedEmpId
+    );
+    if (selectedEmployee) {
+      setName(selectedEmployee.name); // Automatically populate the name field
+    } else {
+      setName(""); // Clear the name field if no employee is found
+    }
+  };
+
   return (
     <Box
       sx={{
@@ -320,17 +396,28 @@ const AdminPayrollPage = () => {
             <Typography variant="h5" sx={{ mb: 2 }}>
               Add/Edit Payroll
             </Typography>
-            <TextField
-              label="Employee ID"
-              value={empId}
-              onChange={(e) => setEmpId(e.target.value)}
-              sx={{ mb: 2 }}
-            />
+            <FormControl sx={{ mb: 2 }}>
+              <InputLabel id="empId-label">Employee ID</InputLabel>
+              <Select
+                labelId="empId-label"
+                value={empId}
+                onChange={handleEmpIdChange} // Use the new change handler
+              >
+                {employees.map((employee) => (
+                  <MenuItem key={employee.id} value={employee.empId}>
+                    {employee.empId}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <TextField
               label="Employee Name"
-              value={name}
+              value={name} // Use the name state to display the employee name
               onChange={(e) => setName(e.target.value)}
               sx={{ mb: 2 }}
+              InputProps={{
+                readOnly: true, // Make the field read-only
+              }}
             />
             <TextField
               label="Salary"
@@ -436,53 +523,43 @@ const AdminPayrollPage = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {paginatedPayrollData.map((payroll) => (
-                    <TableRow key={payroll.id}>
-                      <TableCell>{payroll.empId}</TableCell>
-                      <TableCell>{payroll.name}</TableCell>
-                      <TableCell>{payroll.month}</TableCell>
-                      <TableCell>{payroll.salary}</TableCell>
-                      <TableCell>{payroll.benefits}</TableCell>
-                      <TableCell>
-                        {Number(
-                          payroll.deductionsBreakdown.tax.replace(/,/g, "") || 0
-                        ) +
-                          Number(
-                            payroll.deductionsBreakdown.healthInsurance.replace(
-                              /,/g,
-                              ""
-                            ) || 0
-                          ) +
-                          Number(
-                            payroll.deductionsBreakdown.retirement.replace(
-                              /,/g,
-                              ""
-                            ) || 0
-                          ) +
-                          Number(
-                            payroll.deductionsBreakdown.loan.replace(
-                              /,/g,
-                              ""
-                            ) || 0
-                          )}
-                      </TableCell>
-                      <TableCell>{payroll.netPay}</TableCell>
-                      <TableCell>
-                        <IconButton
-                          onClick={() => handleEditPayroll(payroll.id)}
-                          sx={{ color: "blue" }}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => handleDeletePayroll(payroll.id)}
-                          sx={{ color: "red" }}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {paginatedPayrollData.map((payroll) => {
+                    const month = new Date(payroll.month);
+                    const formattedMonth = `${month.getFullYear()}-${String(
+                      month.getMonth() + 1
+                    ).padStart(2, "0")}`;
+
+                    return (
+                      <TableRow key={payroll._id}>
+                        <TableCell>{payroll.empId}</TableCell>
+                        <TableCell>{payroll.name}</TableCell>
+                        <TableCell>{formattedMonth}</TableCell>
+                        <TableCell>{payroll.salary}</TableCell>
+                        <TableCell>{payroll.benefits}</TableCell>
+                        <TableCell>
+                          {payroll.deductionsBreakdown.tax +
+                            payroll.deductionsBreakdown.healthInsurance +
+                            payroll.deductionsBreakdown.retirement +
+                            payroll.deductionsBreakdown.loan}
+                        </TableCell>
+                        <TableCell>{payroll.netPay}</TableCell>
+                        <TableCell>
+                          <IconButton
+                            onClick={() => handleEditPayroll(payroll._id)}
+                            sx={{ color: "blue" }}
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton
+                            onClick={() => handleDeletePayroll(payroll._id)}
+                            sx={{ color: "red" }}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>

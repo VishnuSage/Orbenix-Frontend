@@ -1,29 +1,53 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import moment from "moment";
 import allApi from "../services/allApi"; // Import the allApi module
-import { logAttendance } from "./attendanceLeaveSlice"; // Import logAttendance from attendanceLeaveSlice
 
 const initialState = {
   isClockedIn: false,
   startTime: null,
   elapsedTime: 0,
   events: [],
+  monthlyHours: {},
+  employeesTimeData: [], // For admin view
+  dailyStatus: {
+    isCurrentlyClocked: false, // Initial state for isCurrentlyClocked
+    totalHours: 0,
+    lastClockIn: null,
+    lastClockOut: null,
+  }, // Track daily clock in/out status
+  monthlyStats: {
+    totalHours: 0,
+    daysPresent: 0,
+    daysAbsent: 0,
+  },
   snackbarOpen: false,
   snackbarMessage: "",
-  isLoading: false, // Added loading state
-  error: null, // Added error state
+  isLoading: false,
+  error: null,
 };
 
-// Async thunk to fetch events from the API
-export const fetchEvents = createAsyncThunk(
-  "timeTracking/fetchEvents",
-  async () => {
-    const response = await allApi.fetchEventsApi();
-    if (Array.isArray(response)) {
+// Async thunk to fetch monthly hours
+export const fetchMonthlyHours = createAsyncThunk(
+  "timeTracking/fetchMonthlyHours",
+  async ({ empId, month, year }, { rejectWithValue }) => {
+    try {
+      const response = await allApi.fetchMonthlyHoursApi(empId, month, year);
       return response;
-    } else {
-      console.error("Fetched events is not an array:", response);
-      throw new Error("Fetched events is not an array"); // Throw an error if not an array
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+// Async thunk to fetch all employees' time data (for admin)
+export const fetchAllEmployeesTime = createAsyncThunk(
+  "timeTracking/fetchAllEmployeesTime",
+  async (date, { rejectWithValue }) => {
+    try {
+      const response = await allApi.fetchAllEmployeesTimeApi(date);
+      return response;
+    } catch (error) {
+      return rejectWithValue(error.message);
     }
   }
 );
@@ -31,47 +55,130 @@ export const fetchEvents = createAsyncThunk(
 // Thunk to handle clocking in
 export const clockInThunk = createAsyncThunk(
   "timeTracking/clockIn",
-  async ({ empId, dispatch, getState }, { rejectWithValue }) => {
-    const state = getState();
-    const today = moment().format("YYYY-MM-DD");
-    const hasClockedInToday = state.timeTracking.events.some((event) =>
-      moment(event.start).isSame(today, "day")
-    );
+  async ({ empId }, { dispatch, rejectWithValue }) => {
+    try {
+      console.log("Sending Clock-In Request:", { empId });
+      const response = await allApi.clockInApi(empId);
+      console.log("API Response:", response.data);
 
-    if (!hasClockedInToday) {
-      try {
-        // Dispatch logAttendance from attendanceLeaveSlice
-        await dispatch(
-          logAttendance({
-            empId,
-            status: "present",
-            date: today,
-          })
-        );
-      } catch (error) {
-        console.error("Failed to log attendance:", error);
-        return rejectWithValue("Failed to log attendance.");
-      }
+      // Destructure properly from the response object
+      const { clockInTime, entry, attendanceEntry } = response; // Access within the response object
+      dispatch(fetchDailyStatus({ empId: empId, date: new Date() }));
+      // Update state in timeTrackingSlice based on the response data
+      return {
+        clockInTime: clockInTime,
+        entry: entry,
+        attendanceEntry: attendanceEntry,
+      };
+    } catch (error) {
+      console.error("Failed to clock in:", error);
+      return rejectWithValue(error.response?.message || "Failed to clock in");
     }
-
-    return today; // Return today's date for further use
   }
 );
 
 // Thunk to handle clocking out
 export const clockOutThunk = createAsyncThunk(
   "timeTracking/clockOut",
-  async ({ empId, dispatch }, { getState }) => {
-    const state = getState();
-    const endTime = Date.now();
-    const elapsedSeconds = Math.floor(
-      (endTime - state.timeTracking.startTime) / 1000
-    );
+  async ({ empId }, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await allApi.clockOutApi(empId);
+      // Assuming the response structure is the same
+      const { entry, clockOutTime, hoursWorked } = response; // Access within the response object
+      // Dispatch an action to refetch daily status
+      dispatch(fetchDailyStatus({ empId: empId, date: new Date() }));
+      // Dispatch an action to update monthly stats after clocking out
+      dispatch(
+        fetchMonthlyStats({
+          empId: empId,
+          month: moment().month() + 1,
+          year: moment().year(),
+        })
+      );
+      return {
+        entry,
+        clockOutTime,
+        hoursWorked,
+      };
+    } catch (error) {
+      console.error("Failed to clock out:", error);
+      return rejectWithValue(error.response?.message || "Failed to clock out");
+    }
+  }
+);
 
-    // Log attendance as absent
-    await dispatch(logAttendance({ empId, status: "absent" }));
+// Thunk to fetch daily status and update elapsed time
+export const fetchDailyStatus = createAsyncThunk(
+  "timeTracking/fetchDailyStatus",
+  async ({ empId, date }, { rejectWithValue }) => {
+    try {
+      const formattedDate = moment(date).format("YYYY-MM-DD");
+      const response = await allApi.fetchDailyHoursApi(empId, formattedDate);
+      console.log("fetchDailyStatus Response:", response);
+      const {
+        totalHours,
+        isCurrentlyClocked,
+        status,
+        events,
+        hoursWorked,
+        lastClockIn,
+      } = response;
 
-    return elapsedSeconds; // Return elapsed seconds for further use
+      // Calculate elapsed time
+      let elapsedTime = 0;
+      let lastClockInTime = null;
+      for (const event of events) {
+        if (event.type === "clockIn") {
+          lastClockInTime = new Date(event.timestamp);
+        } else if (event.type === "clockOut" && lastClockInTime) {
+          elapsedTime += (new Date(event.timestamp) - lastClockInTime) / 1000; // Calculate elapsed time
+          lastClockInTime = null;
+        }
+      }
+
+      // Handle missing clock-out event
+      if (isCurrentlyClocked && lastClockInTime) {
+        const now = new Date();
+        elapsedTime += (now - lastClockInTime) / 1000;
+      }
+
+      return {
+        totalHours,
+        isCurrentlyClocked,
+        status,
+        events,
+        hoursWorked,
+        elapsedTime,
+        lastClockIn,
+      };
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.message || "Failed to fetch daily status"
+      );
+    }
+  }
+);
+
+// Thunk to fetch monthly statistics
+export const fetchMonthlyStats = createAsyncThunk(
+  "timeTracking/fetchMonthlyStats",
+  async ({ empId, month, year }, { rejectWithValue }) => {
+    try {
+      const response = await allApi.fetchMonthlyHoursApi(empId, month, year);
+      console.log("fetchMonthlyStats API Response:", response);
+
+      // Convert the fraction of an hour to full hours
+      const totalHoursWorked = (response.totalHours * 60) / 60; // Convert from fraction of an hour to full hours
+
+      return {
+        totalHours: totalHoursWorked,
+        month,
+        year,
+        empId,
+      };
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
   }
 );
 
@@ -91,7 +198,9 @@ const timeTrackingSlice = createSlice({
       state.snackbarOpen = action.payload;
     },
     setSnackbarMessage: (state, action) => {
-      state.snackbarMessage = action.payload;
+      const { open, message } = action.payload;
+      state.snackbarOpen = open;
+      state.snackbarMessage = message; // Ensure message is a string
     },
     clearSnackbar: (state) => {
       state.snackbarOpen = false; // Close the snackbar
@@ -109,36 +218,93 @@ const timeTrackingSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchEvents.pending, (state) => {
-        state.isLoading = true; // Set loading state to true
-        state.error = null; // Clear any previous errors
-      })
-      .addCase(fetchEvents.fulfilled, (state, action) => {
-        state.isLoading = false; // Set loading state to false
-        state.events = action.payload; // Update events with fetched data
-      })
-      .addCase(fetchEvents.rejected, (state, action) => {
-        state.isLoading = false; // Set loading state to false
-        state.snackbarOpen = true;
-        state.snackbarMessage = "Failed to fetch events.";
-        state.error = action.error.message; // Capture error message
-      })
-      .addCase(clockInThunk.fulfilled, (state) => {
+      // Clock In/Out cases
+      .addCase(clockInThunk.fulfilled, (state, action) => {
+        const { clockInTime } = action.payload;
         state.isClockedIn = true;
-        state.startTime = Date.now(); // Set start time when clocking in
+        state.startTime = new Date(clockInTime).getTime();
+        state.dailyStatus = {
+          ...state.dailyStatus,
+          isCurrentlyClocked: true,
+          lastClockIn: clockInTime,
+        };
       })
-      .addCase(clockInThunk.rejected, (state) => {
+      .addCase(clockInThunk.rejected, (state, action) => {
         state.snackbarOpen = true;
-        state.snackbarMessage = "Failed to clock in.";
+        state.snackbarMessage = action.payload || "Failed to clock in.";
       })
       .addCase(clockOutThunk.fulfilled, (state, action) => {
+        const { clockOutTime, hoursWorked } = action.payload;
         state.isClockedIn = false;
-        state.elapsedTime += action.payload; // Update elapsed time with the returned value
-        state.startTime = null; // Reset start time
+        state.elapsedTime = 0;
+        state.startTime = null;
+        state.dailyStatus = {
+          ...state.dailyStatus,
+          isCurrentlyClocked: false,
+          lastClockOut: clockOutTime,
+          hoursWorked,
+        };
+        // Update monthly stats
+        state.monthlyStats.totalHours += hoursWorked;
       })
-      .addCase(clockOutThunk.rejected, (state) => {
+      .addCase(clockOutThunk.rejected, (state, action) => {
         state.snackbarOpen = true;
-        state.snackbarMessage = "Failed to clock out.";
+        state.snackbarMessage = action.payload || "Failed to clock out.";
+      })
+      // Daily status cases
+      .addCase(fetchDailyStatus.fulfilled, (state, action) => {
+        console.log("Daily Status Fetched:", action.payload);
+        state.dailyStatus = action.payload;
+        state.elapsedTime = action.payload.elapsedTime;
+        // Update events array to include daily hours
+        state.events.push({
+          title: `Hours Worked: ${action.payload.hoursWorked || 0}`,
+          start: new Date(action.payload.date),
+          end: new Date(action.payload.date),
+        });
+      })
+      .addCase(fetchDailyStatus.rejected, (state, action) => {
+        state.error = action.payload;
+        state.snackbarOpen = true; // Open snackbar on error
+        state.snackbarMessage =
+          action.payload || "Failed to fetch daily status."; // Set error message
+      })
+      // Monthly stats cases
+      .addCase(fetchMonthlyStats.fulfilled, (state, action) => {
+        state.monthlyStats = action.payload;
+      })
+      .addCase(fetchMonthlyStats.rejected, (state, action) => {
+        state.error = action.payload;
+      })
+      // Monthly hours cases
+      .addCase(fetchMonthlyHours.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(fetchMonthlyHours.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.monthlyHours = action.payload;
+      })
+      .addCase(fetchMonthlyHours.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+        state.snackbarOpen = true;
+        state.snackbarMessage = "Failed to fetch monthly hours.";
+      })
+      // Admin time tracking cases
+      .addCase(fetchAllEmployeesTime.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(fetchAllEmployeesTime.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.employeesTimeData = action.payload;
+      })
+      .addCase(fetchAllEmployeesTime.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+        state.snackbarOpen = true;
+        state.snackbarMessage = "Failed to fetch employees' time data.";
       });
   },
 });
@@ -154,26 +320,53 @@ export const {
   addEvent,
 } = timeTrackingSlice.actions;
 
-// Selectors
+// Additional selectors
+export const selectDailyStatus = (state) => state.timeTracking.dailyStatus;
+export const selectMonthlyStats = (state) => state.timeTracking.monthlyStats;
+
+// Inside your timeTrackingSlice.js
 export const selectDailyHours = (state, employees) => {
+  const dailyStatus = selectDailyStatus(state); // Get the dailyStatus from the state
   const dailyHours = {};
+
   employees.forEach((employee) => {
+    // Handle cases where dailyStatus[employee.empId] might be undefined
+    const statusData = dailyStatus[employee.empId] || {
+      totalHours: 0,
+      isCurrentlyClocked: false,
+      lastClockIn: null,
+      lastClockOut: null,
+    };
+
     dailyHours[employee.empId] = {
-      totalSeconds: state.timeTracking.events
-        .filter((event) => event.empId === employee.empId)
-        .reduce((total, event) => total + event.duration, 0),
-      isActive: state.timeTracking.isClockedIn && state.timeTracking.startTime,
+      // Convert totalHours (in hours) to totalSeconds (in seconds)
+      totalSeconds: statusData.totalHours * 3600, // Assuming totalHours is in hours
+      isActive: statusData.isCurrentlyClocked,
+      lastClockIn: statusData.lastClockIn,
+      lastClockOut: statusData.lastClockOut,
     };
   });
+
   return dailyHours;
 };
 
-export const selectFilteredEmployees = (state, employees, searchQuery) => {
-  if (!searchQuery) return employees;
-  return employees.filter(
+// Selectors
+export const selectMonthlyHours = (state) => state.timeTracking.monthlyHours;
+export const selectEmployeesTimeData = (state) =>
+  state.timeTracking.employeesTimeData;
+export const selectIsLoading = (state) => state.timeTracking.isLoading;
+export const selectError = (state) => state.timeTracking.error;
+
+// Helper selector for filtering employees time data
+export const selectFilteredEmployeesTime = (state, searchQuery) => {
+  const employeesTimeData = selectEmployeesTimeData(state);
+  if (!searchQuery) return employeesTimeData;
+
+  return employeesTimeData.filter(
     (employee) =>
       employee.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      employee.empId.toString().includes(searchQuery)
+      employee.empId.toString().includes(searchQuery) ||
+      employee.department?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 };
 

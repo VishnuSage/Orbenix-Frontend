@@ -1,14 +1,15 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import {
-  fetchEvents,
   clockInThunk,
   clockOutThunk,
   setSnackbarMessage,
   clearSnackbar,
   addEvent,
   updateElapsedTime,
-} from "../redux/timeTrackingSlice"; // Adjust the import path as necessary
+  fetchDailyStatus,
+  fetchMonthlyStats,
+} from "../redux/timeTrackingSlice";
 import { fetchAttendanceData } from "../redux/attendanceLeaveSlice";
 import {
   Box,
@@ -22,6 +23,7 @@ import {
   IconButton,
   Snackbar,
   styled,
+  CircularProgress, // Import CircularProgress
 } from "@mui/material";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import DoorFrontIcon from "@mui/icons-material/DoorFront";
@@ -51,14 +53,45 @@ const TimeTrackingPage = () => {
   const isClockedIn = useSelector((state) => state.timeTracking.isClockedIn);
   const startTime = useSelector((state) => state.timeTracking.startTime);
   const elapsedTime = useSelector((state) => state.timeTracking.elapsedTime);
-  const events = useSelector((state) => state.timeTracking.events);
+  const dailyStatus = useSelector((state) => state.timeTracking.dailyStatus);
+  const monthlyStats = useSelector((state) => state.timeTracking.monthlyStats);
   const snackbarOpen = useSelector((state) => state.timeTracking.snackbarOpen);
   const snackbarMessage = useSelector(
     (state) => state.timeTracking.snackbarMessage
   );
+  const attendanceData = useSelector(
+    (state) => state.attendanceLeave.attendanceData.attendance
+  );
 
-  const empId = useSelector((state) => state.auth.empId); // Access empId from the Redux state
+  const empId = useSelector((state) => state.auth.empId);
 
+  const monthlyTarget = 160;
+
+  const monthlyProgress =
+    monthlyTarget > 0 ? (monthlyStats.totalHours / monthlyTarget) * 100 : 0;
+
+  // Fetch attendance and daily status data
+  useEffect(() => {
+    const fetchData = async () => {
+      // Fetch attendance data
+      await dispatch(fetchAttendanceData(empId));
+
+      // Fetch daily status for today
+      await dispatch(fetchDailyStatus({ empId: empId, date: new Date() }));
+
+      // Fetch monthly stats
+      await dispatch(
+        fetchMonthlyStats({
+          empId: empId,
+          month: moment().month() + 1,
+          year: moment().year(),
+        })
+      );
+    };
+    fetchData();
+  }, [dispatch, empId]);
+
+  // Update elapsedTime every second when clocked in
   useEffect(() => {
     let timer;
     if (isClockedIn) {
@@ -70,16 +103,17 @@ const TimeTrackingPage = () => {
   }, [dispatch, isClockedIn]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        await dispatch(fetchEvents());
-      } catch (error) {
-        console.error("Error fetching events:", error);
-        showSnackbar("Failed to fetch events. Please try again.");
-      }
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0); // Set time to midnight
+
+    const resetTimer = () => {
+      dispatch(resetTimer());
     };
 
-    fetchData();
+    const timerId = setTimeout(resetTimer, tomorrow - today);
+    return () => clearTimeout(timerId);
   }, [dispatch]);
 
   const handleSnackbarClose = () => dispatch(clearSnackbar());
@@ -90,10 +124,10 @@ const TimeTrackingPage = () => {
 
   const handleClockIn = async () => {
     try {
-      const clockInTime = Date.now();
-      await dispatch(clockInThunk({ empId: empId, dispatch }));
+      const response = await dispatch(clockInThunk({ empId: empId }));
 
-      // Add clock-in event
+      const { clockInTime } = response;
+
       dispatch(
         addEvent({
           title: "Clock In",
@@ -103,7 +137,7 @@ const TimeTrackingPage = () => {
       );
 
       showSnackbar("Clocked In Successfully!");
-      await dispatch(fetchAttendanceData(empId));
+      // No need to fetch attendance data again here
     } catch (error) {
       console.error("Error during clock in:", error);
       showSnackbar("Failed to clock in. Please try again.");
@@ -113,9 +147,8 @@ const TimeTrackingPage = () => {
   const handleClockOut = async () => {
     try {
       const clockOutTime = Date.now();
-      await dispatch(clockOutThunk({ empId: empId, dispatch }));
+      await dispatch(clockOutThunk({ empId: empId }));
 
-      // Add clock-out event
       dispatch(
         addEvent({
           title: "Clock Out",
@@ -124,8 +157,16 @@ const TimeTrackingPage = () => {
         })
       );
 
+      await dispatch(
+        fetchMonthlyStats({
+          empId: empId,
+          month: moment().month() + 1,
+          year: moment().year(),
+        })
+      );
+
       showSnackbar("Clocked Out Successfully!");
-      await dispatch(fetchAttendanceData(empId));
+      // No need to fetch attendance data again here
     } catch (error) {
       console.error("Error during clock out:", error);
       showSnackbar("Failed to clock out. Please try again.");
@@ -133,54 +174,73 @@ const TimeTrackingPage = () => {
   };
 
   const formatElapsedTime = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs
+    const hours = Math.floor(seconds / 3600)
       .toString()
-      .padStart(2, "0")}`;
+      .padStart(2, "0");
+    const minutes = Math.floor((seconds % 3600) / 60)
+      .toString()
+      .padStart(2, "0");
+    const secs = Math.floor(seconds % 60)
+      .toString()
+      .padStart(2, "0");
+    return `${hours}:${minutes}:${secs}`;
   };
 
-  const eventStyleGetter = (event) => {
-    const style = {
-      backgroundColor: event.title === "Absent" ? "red" : "green",
-      borderRadius: "0px",
-      opacity: 0.8,
-      color: "white",
-      border: "0px",
-      display: "block",
-      textAlign: "center",
-      padding: "5px",
-    };
-    return { style };
+  const formatTotalHours = (totalHours) => {
+    const totalSeconds = Math.floor(totalHours * 3600);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    return `${hours.toString().padStart(2, "0")}:${minutes
+      .toString()
+      .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
   };
 
-  const calculateTotalHoursWorkedThisMonth = () => {
-    const currentMonth = moment().month();
-    let totalSeconds = 0;
-    (Array.isArray(events) ? events : []).forEach((event) => {
-      if (moment(event.start).month() === currentMonth) {
-        const timeParts = event.title.split(":");
-        if (timeParts.length === 3) {
-          const hours = parseInt(timeParts[0], 10) || 0;
-          const minutes = parseInt(timeParts[1], 10) || 0;
-          const seconds = parseInt(timeParts[2], 10) || 0;
-          totalSeconds += hours * 3600 + minutes * 60 + seconds;
-        } else {
-          console.error(`Invalid time format: ${event.title}`);
-        }
+  const [calendarEvents, setCalendarEvents] = useState([]);
+
+  const prepareCalendarEvents = useCallback(() => {
+    const calendarEvents = [];
+    const today = moment().startOf("day");
+
+    if (dailyStatus && dailyStatus.status !== undefined) {
+      const workedHours = dailyStatus.totalHours || 0;
+      const formattedHours = formatTotalHours(workedHours);
+
+      if (dailyStatus.status === "present") {
+        calendarEvents.push({
+          title: formattedHours,
+          start: today.toDate(),
+          end: today.toDate(),
+        });
+      } else {
+        calendarEvents.push({
+          title: "Absent",
+          start: today.toDate(),
+          end: today.toDate(),
+          style: {
+            backgroundColor: "red",
+            color: "white",
+            borderRadius: "0px",
+            opacity: 0.8,
+          },
+        });
       }
-    });
-    return totalSeconds;
-  };
+    } else {
+      calendarEvents.push({
+        title: "Loading attendance data...",
+        start: today.toDate(),
+        end: today.toDate(),
+      });
+    }
 
-  const totalHoursWorkedThisMonth = calculateTotalHoursWorkedThisMonth();
-  const formattedTotalHoursWorkedThisMonth = formatElapsedTime(
-    totalHoursWorkedThisMonth
-  );
-  const monthlyTarget = 160 * 3600; // 160 hours per month
-  const monthlyProgress =
-    monthlyTarget > 0 ? (totalHoursWorkedThisMonth / monthlyTarget) * 100 : 0;
+    return calendarEvents;
+  }, [dailyStatus]);
+
+  useEffect(() => {
+    const calendarEvents = prepareCalendarEvents();
+    setCalendarEvents(calendarEvents);
+  }, [prepareCalendarEvents]);
 
   return (
     <Box sx={{ padding: 2 }}>
@@ -194,7 +254,7 @@ const TimeTrackingPage = () => {
             color="success"
             sx={{ margin: 1 }}
             onClick={handleClockIn}
-            disabled={isClockedIn}
+            disabled={dailyStatus.isCurrentlyClocked}
             startIcon={<DoorFrontIcon />}
           >
             Clock In
@@ -203,7 +263,7 @@ const TimeTrackingPage = () => {
             variant="contained"
             color="error"
             onClick={handleClockOut}
-            disabled={!isClockedIn}
+            disabled={!dailyStatus.isCurrentlyClocked}
             startIcon={<MeetingRoomIcon />}
           >
             Clock Out
@@ -212,16 +272,33 @@ const TimeTrackingPage = () => {
       </Card>
       <Card variant="outlined" sx={{ marginBottom: 2, height: 500 }}>
         <CardContent sx={{ height: "100%" }}>
-          <Typography variant="h5">Work Hours Calendar</Typography>
-          <Calendar
-            localizer={localizer}
-            events={Array.isArray(events) ? events : []}
-            onSelectEvent={(event) => console.log(event)}
-            onSelectSlot={(slotInfo) => console.log(slotInfo)}
-            defaultView="month"
-            defaultDate={new Date()}
-            eventPropGetter={(event) => eventStyleGetter(event)}
-          />
+          <Typography variant="h5"> Work Hours Calendar</Typography>
+          {dailyStatus.isLoading ? (
+            <CircularProgress />
+          ) : (
+            <Calendar
+              localizer={localizer}
+              events={prepareCalendarEvents()}
+              onSelectEvent={(event) => console.log(event)}
+              onSelectSlot={(slotInfo) => console.log(slotInfo)}
+              defaultView="month"
+              defaultDate={new Date()}
+              eventPropGetter={(event) => ({
+                style: {
+                  backgroundColor: event.title.includes("Absent")
+                    ? "red"
+                    : "green",
+                  borderRadius: "0px",
+                  opacity: 0.8,
+                  color: "white",
+                  border: "0px",
+                  display: "block",
+                  textAlign: "center",
+                  padding: "5px",
+                },
+              })}
+            />
+          )}
         </CardContent>
       </Card>
       <Grid item xs={12}>
@@ -235,7 +312,7 @@ const TimeTrackingPage = () => {
         >
           <CardContent>
             <SubHeading variant="h6" component="h2">
-              Total Hours Worked
+              Total Time Worked This Month
             </SubHeading>
             <Box sx={{ display: "flex", alignItems: "center", marginTop: 1 }}>
               <Typography
@@ -243,14 +320,17 @@ const TimeTrackingPage = () => {
                 component="span"
                 sx={{ fontWeight: "bold", marginRight: 2 }}
               >
-                {formattedTotalHoursWorkedThisMonth}
+                {monthlyStats.totalHours
+                  ? formatTotalHours(monthlyStats.totalHours) // Use formatTotalHours here
+                  : "00:00:00"}{" "}
+                {/* Default to 00:00:00 if totalHours is 0 */}
               </Typography>
               <Typography
                 variant="body1"
                 component="span"
                 sx={{ color: "gray" }}
               >
-                hours worked this month
+                total time worked this month
               </Typography>
               <Tooltip title="Monthly target: 160 hours" arrow>
                 <IconButton sx={{ marginLeft: 2 }}>

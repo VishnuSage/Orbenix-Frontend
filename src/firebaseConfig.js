@@ -1,15 +1,16 @@
+/* global process */
 // firebase.js
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyBkAhu9pxn-s0zhUOPA8E2Kj6ceczvXr60",
-    authDomain: "orbenix-4ba59.firebaseapp.com",
-    projectId: "orbenix-4ba59",
-    storageBucket: "orbenix-4ba59.firebasestorage.app",
-    messagingSenderId: "932771093971",
-    appId: "1:932771093971:web:ec892e436e43d2d9e4e326",
-    measurementId: "G-8YB2K0NTV8"
+    apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+    authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.REACT_APP_FIREBASE_APP_ID,
+    measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase

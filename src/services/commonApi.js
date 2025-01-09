@@ -31,7 +31,7 @@ export const commonApi = async (
   const token = state.auth.token; // Access the token from auth slice
 
   // Validate HTTP method
-  const allowedMethods = ["GET", "POST", "PUT", "DELETE"];
+  const allowedMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
   if (!allowedMethods.includes(httpRequestType)) {
     throw new Error(`Invalid HTTP method: ${httpRequestType}`);
   }

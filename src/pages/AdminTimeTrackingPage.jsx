@@ -16,38 +16,90 @@ import {
   Typography,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search"; // Import the search icon
-import { fetchEmployees } from "../redux/employeeSlice"; // Ensure this fetches from your API
-import {
-  selectDailyHours,
-  selectFilteredEmployees,
-} from "../redux/timeTrackingSlice"; // Import selectors from your slice
+import { fetchEmployees } from "../redux/employeeSlice"; // Adjust the path as needed
+import { fetchDailyStatus } from "../redux/timeTrackingSlice"; // Import selectors from your slice
 
 const AdminTimeTrackingPage = () => {
   const dispatch = useDispatch();
 
-  // Access employees and status from the Redux store
-  const { employees, status } = useSelector((state) => state.employees);
+  const employees = useSelector((state) => state.employees.employees);
+
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const [searchQuery, setSearchQuery] = useState(""); // State for search query
+  const [isLoading, setIsLoading] = useState(true);
+  const [dailyHours, setDailyHours] = useState({});
+  const [dailyStatusForEmployees, setDailyStatusForEmployees] = useState({});
 
   useEffect(() => {
-    // Fetch employee data if not already loaded
-    if (status === "idle") {
-      dispatch(fetchEmployees()); // This should now fetch from the API
-    }
-  }, [dispatch, status]);
+    const fetchData = async () => {
+      setIsLoading(true);
 
-  // Calculate daily hours using the selector
-  const dailyHours = useSelector((state) => selectDailyHours(state, employees));
+      // Fetch employee data if not already loaded
+      if (employees.length === 0) {
+        await dispatch(fetchEmployees());
+      }
+
+      // Fetch daily hours and status for each employee
+      const dailyHoursData = {};
+      const employeeDailyStatus = {};
+      for (const employee of employees) {
+        const response = await dispatch(
+          fetchDailyStatus({ empId: employee.empId, date: new Date() })
+        );
+        console.log(
+          "Daily Status Response for Employee:",
+          employee.empId,
+          response
+        );
+        dailyHoursData[employee.empId] = response.payload.totalHours || 0; // Store the total hours
+        employeeDailyStatus[employee.empId] = response.payload; // Store the entire dailyStatus object
+      }
+      setDailyHours(dailyHoursData);
+      setDailyStatusForEmployees(employeeDailyStatus);
+      setIsLoading(false);
+    };
+
+    fetchData();
+  }, [dispatch, employees]);
+
+  // Function to format total hours
+  const formatTotalHours = (totalHours) => {
+    const totalSeconds = Math.floor(totalHours * 3600); // Convert hours to seconds
+
+    // If totalSeconds is less than 1, return a message indicating less than a minute
+    if (totalSeconds < 1) return "Less than a minute"; // Return a message for very small values
+
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    // Return formatted time
+    return `${hours.toString().padStart(2, "0")}:${minutes
+      .toString()
+      .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+  };
 
   // Filter employees based on search query using the selector
-  const filteredEmployees = useSelector((state) =>
-    selectFilteredEmployees(state, employees, searchQuery)
-  );
+  const filterEmployees = (employees, searchQuery) => {
+    if (!searchQuery) {
+      return employees;
+    }
+
+    return employees.filter((employee) => {
+      return (
+        employee.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        employee.empId.toString().includes(searchQuery)
+      );
+    });
+  };
+
+  const filteredEmployees = filterEmployees(employees, searchQuery);
+
+  const status = useSelector((state) => state.employees.status);
 
   // Handle loading state
-  if (status === "loading") {
+  if (isLoading) {
     return <CircularProgress />;
   }
 
@@ -66,7 +118,7 @@ const AdminTimeTrackingPage = () => {
   }
 
   // Function to render status indicator
-  const renderStatus = (isActive) => {
+  const renderStatus = (isCurrentlyClocked) => {
     return (
       <div style={{ display: "flex", alignItems: "center" }}>
         <div
@@ -74,11 +126,11 @@ const AdminTimeTrackingPage = () => {
             width: 10,
             height: 10,
             borderRadius: "50%",
-            backgroundColor: isActive ? "green" : "red",
+            backgroundColor: isCurrentlyClocked ? "green" : "red",
             marginRight: 8,
           }}
         />
-        {isActive ? "Active" : "Inactive"}
+        {isCurrentlyClocked ? "Active" : "Inactive"}
       </div>
     );
   };
@@ -158,12 +210,12 @@ const AdminTimeTrackingPage = () => {
             {filteredEmployees
               .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
               .map((employee, index) => {
-                const { totalSeconds, isActive } = dailyHours[
-                  employee.empId
-                ] || {
-                  totalSeconds: 0,
-                  isActive: false,
-                };
+                const totalHours = dailyHours[employee.empId] || 0; // Get total hours for the employee
+                const formattedTime = formatTotalHours(totalHours);
+                const isCurrentlyClocked =
+                  dailyStatusForEmployees[employee.empId]?.isCurrentlyClocked ||
+                  false;
+
                 return (
                   <TableRow
                     key={employee.empId}
@@ -176,8 +228,8 @@ const AdminTimeTrackingPage = () => {
                     <TableCell>{employee.name}</TableCell>
                     <TableCell>{employee.position}</TableCell>
                     <TableCell>{employee.department}</TableCell>
-                    <TableCell>{(totalSeconds / 3600).toFixed(2)}</TableCell>
-                    <TableCell>{renderStatus(isActive)}</TableCell>
+                    <TableCell>{formattedTime}</TableCell>
+                    <TableCell>{renderStatus(isCurrentlyClocked)}</TableCell>
                   </TableRow>
                 );
               })}

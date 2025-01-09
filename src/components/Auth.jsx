@@ -549,7 +549,7 @@ const Auth = () => {
                     Register
                   </Typography>
                   <TextField
-                    label="Email or Phone Number"
+                    label="Phone Number"
                     value={emailOrPhone}
                     onChange={(e) => setEmailOrPhone(e.target.value)}
                     fullWidth
