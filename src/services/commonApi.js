@@ -1,13 +1,10 @@
 import axios from "axios";
-import { BASE_URL } from "./baseurl"; // Ensure BASE_URL is correctly imported
-import { store } from "../redux/store"; // Import your Redux store
+import { BASE_URL } from "./baseurl";
+import { store } from "../redux/store";
 
-// Function to retrieve the JWT from local storage
-const getJwtToken = () => {
-  const token = localStorage.getItem("jwtToken"); // Retrieve using the new name
-  console.log("Retrieved jwtToken from localStorage:", token); // Log the retrieved token
-  return token; // Return the token
-};
+// SECURITY WARNING:
+// Storing JWT tokens in localStorage exposes them to XSS attacks. For production, consider using httpOnly cookies for JWT storage.
+// See: https://owasp.org/www-community/HttpOnly
 
 // Function to store the JWT in local storage
 export const setToken = (token) => {
@@ -20,6 +17,17 @@ export const removeJwtToken = () => {
   console.log("Removing jwtToken from localStorage."); // Log the removal
   localStorage.removeItem("jwtToken"); // Remove the token using the new name
 };
+
+// Improved error handling utility
+function extractApiError(error) {
+  if (error.response && error.response.data) {
+    if (typeof error.response.data === 'string') return error.response.data;
+    if (error.response.data.message) return error.response.data.message;
+    return JSON.stringify(error.response.data);
+  }
+  if (error.message) return error.message;
+  return 'Unknown error occurred';
+}
 
 export const commonApi = async (
   httpRequestType = "GET", // Default to GET
@@ -70,7 +78,7 @@ export const commonApi = async (
   } catch (err) {
     // Log the error for debugging
     console.error("API call error:", err);
-    // Re-throw the error for handling in the calling component
-    throw err;
+    // Throw a cleaner error message
+    throw new Error(extractApiError(err));
   }
 };

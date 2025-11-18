@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import Logo from "../assets/orbenix-logo.png"; // Adjust the path to your logo file
 import {
   Box,
@@ -26,7 +26,6 @@ import {
   setEmpId,
   setToken,
   verifyOtpAsync,
-  clearVerificationState,
   clearPasswordResetState,
   clearRegistrationState,
   setRoles,
@@ -66,7 +65,6 @@ const Auth = () => {
   const [roleSelection, setRoleSelection] = useState(false);
   const [isSendingVerification, setIsSendingVerification] = useState(false);
   const [isVerifyingOTP, setIsVerifyingOTP] = useState(false);
-  const [verificationError, setVerificationError] = useState("");
   const [forgotPasswordStage, setForgotPasswordStage] = useState(1); // 1: Email/Phone, 2: OTP, 3: New Password
   const [registrationStage, setRegistrationStage] = useState(1); // 1: Email/Phone, 2: OTP, 3: Password
   const [confirmationResult, setConfirmationResult] = useState(null);
@@ -78,16 +76,7 @@ const Auth = () => {
     loading,
     isRegistering,
     forgotPassword,
-    authData,
-    registrationSuccess,
-    registrationError,
   } = useSelector((state) => state.auth);
-
-  const validateEmailOrPhone = (input) => {
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // Basic email pattern
-    const phonePattern = /^\+\d{1,3}\d{10}$/;
-    return emailPattern.test(input) || phonePattern.test(input);
-  };
 
   const validatePassword = (password) => {
     const conditions = [
@@ -118,44 +107,32 @@ const Auth = () => {
       : "";
   };
 
-  const handlePasswordChange = (e) => {
-    const password = e.target.value;
-    setPassword(password);
-
-    if (isRegistering) {
-      const validationError = validatePassword(password);
+  const handleInputChange = (setter, validator) => (e) => {
+    const value = e.target.value;
+    setter(value);
+    if (validator) {
+      const validationError = validator(value);
       setPasswordValidationMessage(validationError);
-    } else {
-      setPasswordValidationMessage("");
     }
   };
 
-  const handleConfirmPasswordChange = (e) => {
-    setConfirmPassword(e.target.value);
-  };
-
-  const handleNewPasswordChange = (e) => {
-    setNewPassword(e.target.value);
-  };
-
-  const handleConfirmNewPasswordChange = (e) => {
-    setConfirmNewPassword(e.target.value);
-  };
-
-  const handleTogglePasswordVisibility = () => {
-    setShowPassword((prev) => !prev);
-  };
-
-  const handleToggleConfirmPasswordVisibility = () => {
-    setShowConfirmPassword((prev) => !prev);
-  };
-
-  const handleToggleNewPasswordVisibility = () => {
-    setShowNewPassword((prev) => !prev);
-  };
-
-  const handleToggleConfirmNewPasswordVisibility = () => {
-    setShowConfirmNewPassword((prev) => !prev);
+  const handleToggleVisibility = (field) => {
+    switch (field) {
+      case "password":
+        setShowPassword((prev) => !prev);
+        break;
+      case "confirmPassword":
+        setShowConfirmPassword((prev) => !prev);
+        break;
+      case "newPassword":
+        setShowNewPassword((prev) => !prev);
+        break;
+      case "confirmNewPassword":
+        setShowConfirmNewPassword((prev) => !prev);
+        break;
+      default:
+        break;
+    }
   };
 
   const handleSendVerification = async () => {
@@ -477,11 +454,6 @@ const Auth = () => {
                       "Verify OTP"
                     )}
                   </Button>
-                  {verificationError && (
-                    <Typography color="error" align="center" sx={{ mt: 2 }}>
-                      {verificationError}
-                    </Typography>
-                  )}
                 </>
               )}
 
@@ -494,14 +466,14 @@ const Auth = () => {
                     label="New Password"
                     type={showNewPassword ? "text" : "password"}
                     value={newPassword}
-                    onChange={handleNewPasswordChange}
+                    onChange={handleInputChange(setNewPassword)}
                     fullWidth
                     margin="normal"
                     InputProps={{
                       startAdornment: <LockIcon sx={{ mr: 1 }} />,
                       endAdornment: (
                         <Button
-                          onClick={handleToggleNewPasswordVisibility}
+                          onClick={() => handleToggleVisibility('newPassword')}
                           sx={{ p: 0, mr: -2 }}
                         >
                           {showNewPassword ? <VisibilityOff /> : <Visibility />}
@@ -513,14 +485,14 @@ const Auth = () => {
                     label="Confirm New Password"
                     type={showConfirmNewPassword ? "text" : "password"}
                     value={confirmNewPassword}
-                    onChange={handleConfirmNewPasswordChange}
+                    onChange={handleInputChange(setConfirmNewPassword)}
                     fullWidth
                     margin="normal"
                     InputProps={{
                       startAdornment: <LockIcon sx={{ mr: 1 }} />,
                       endAdornment: (
                         <Button
-                          onClick={handleToggleConfirmNewPasswordVisibility}
+                          onClick={() => handleToggleVisibility('confirmNewPassword')}
                           sx={{ p: 0, mr: -2 }}
                         >
                           {showConfirmNewPassword ? (
@@ -616,11 +588,6 @@ const Auth = () => {
                       "Verify OTP"
                     )}
                   </Button>
-                  {verificationError && (
-                    <Typography color="error" align="center" sx={{ mt: 2 }}>
-                      {verificationError}
-                    </Typography>
-                  )}
                 </>
               )}
 
@@ -633,14 +600,14 @@ const Auth = () => {
                     label="Password"
                     type={showPassword ? "text" : "password"}
                     value={password}
-                    onChange={handlePasswordChange}
+                    onChange={handleInputChange(setPassword, isRegistering ? validatePassword : null)}
                     fullWidth
                     margin="normal"
                     InputProps={{
                       startAdornment: <LockIcon sx={{ mr: 1 }} />,
                       endAdornment: (
                         <Button
-                          onClick={handleTogglePasswordVisibility}
+                          onClick={() => handleToggleVisibility('password')}
                           sx={{ p: 0, mr: -2 }}
                         >
                           {showPassword ? <VisibilityOff /> : <Visibility />}
@@ -648,18 +615,23 @@ const Auth = () => {
                       ),
                     }}
                   />
+                  {passwordValidationMessage && password && (
+                    <Typography color="error" variant="caption" sx={{ ml: 1 }}>
+                      {passwordValidationMessage}
+                    </Typography>
+                  )}
                   <TextField
                     label="Confirm Password"
                     type={showConfirmPassword ? "text" : "password"}
                     value={confirmPassword}
-                    onChange={handleConfirmPasswordChange}
+                    onChange={handleInputChange(setConfirmPassword)}
                     fullWidth
                     margin="normal"
                     InputProps={{
                       startAdornment: <LockIcon sx={{ mr: 1 }} />,
                       endAdornment: (
                         <Button
-                          onClick={handleToggleConfirmPasswordVisibility}
+                          onClick={() => handleToggleVisibility('confirmPassword')}
                           sx={{ p: 0, mr: -2 }}
                         >
                           {showConfirmPassword ? (
@@ -732,14 +704,14 @@ const Auth = () => {
                       label="Password"
                       type={showPassword ? "text" : "password"}
                       value={password}
-                      onChange={handlePasswordChange}
+                      onChange={handleInputChange(setPassword, isRegistering ? validatePassword : null)}
                       fullWidth
                       margin="normal"
                       InputProps={{
                         startAdornment: <LockIcon sx={{ mr: 1 }} />,
                         endAdornment: (
                           <Button
-                            onClick={handleTogglePasswordVisibility}
+                            onClick={() => handleToggleVisibility('password')}
                             sx={{ p: 0, mr: -2 }}
                           >
                             {showPassword ? <VisibilityOff /> : <Visibility />}
@@ -747,6 +719,11 @@ const Auth = () => {
                         ),
                       }}
                     />
+                    {passwordValidationMessage && password && (
+                      <Typography color="error" variant="caption" sx={{ ml: 1 }}>
+                        {passwordValidationMessage}
+                      </Typography>
+                    )}
                     <Button
                       onClick={handleAuthSubmit}
                       variant="contained"
@@ -758,7 +735,7 @@ const Auth = () => {
                     </Button>
                     <Divider sx={{ my: 2 }} />
                     <Typography variant="body2" align="center">
-                      Don't have an account?
+                      Don&apos;t have an account?
                       <Button
                         onClick={() => {
                           dispatch(toggleRegistering());

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNotificationContext } from "../components/NotificationContext";
 import PropTypes from "prop-types";
@@ -28,10 +28,10 @@ import InfoIcon from "@mui/icons-material/Info";
 import TrainingIcon from "@mui/icons-material/School";
 import {
   fetchPerformanceDataByEmployee,
-  fetchPerformanceData,
   fetchTrainingData,
   setLoading,
 } from "../redux/performanceSlice";
+import { calculatePerformanceMetrics } from "../utils/performanceMetrics";
 
 // RadarChart Component
 const PerformanceChart = ({ data }) => (
@@ -265,21 +265,8 @@ const PerformanceTrainingPage = () => {
 
   const upcomingTraining = findUpcomingTraining(trainingData);
 
-  const totalPerformance = performanceData.reduce(
-    (acc, curr) => acc + curr.performance,
-    0
-  );
-  const averagePerformance =
-    performanceData.length > 0
-      ? (totalPerformance / performanceData.length).toFixed(2)
-      : 0;
-  const percentageChange =
-    performanceData.length >= 2
-      ? ((performanceData[performanceData.length - 1].performance -
-          performanceData[performanceData.length - 2].performance) /
-          performanceData[performanceData.length - 2].performance) *
-        100
-      : 0;
+  const { totalPerformance, averagePerformance, percentageChange } =
+    calculatePerformanceMetrics(performanceData);
 
   return (
     <Box sx={{ minHeight: "100vh", backgroundColor: "transparent", p: 3 }}>

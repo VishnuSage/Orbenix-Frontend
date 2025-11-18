@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import allApi from "../services/allApi"; // Import the API functions
+import { calculatePerformanceMetrics } from "../utils/performanceMetrics";
 
 const initialState = {
   performanceData: [],
@@ -363,23 +364,7 @@ export const { setLoading, setSnackbar, closeSnackbar } =
 
 // Selector for performance metrics
 export const selectPerformanceMetrics = (state) => {
-  const performanceData = state.performance.performanceData;
-  const totalPerformance = performanceData.reduce(
-    (acc, curr) => acc + curr.performance,
-    0
-  );
-  const averagePerformance = performanceData.length
-    ? (totalPerformance / performanceData.length).toFixed(2)
-    : 0; // Handle empty performanceData
-  const percentageChange =
-    performanceData.length >= 2
-      ? ((performanceData[performanceData.length - 1].performance -
-          performanceData[performanceData.length - 2].performance) /
-          performanceData[performanceData.length - 2].performance) *
-        100
-      : 0;
-
-  return { totalPerformance, averagePerformance, percentageChange };
+  return calculatePerformanceMetrics(state.performance.performanceData);
 };
 
 export default performanceSlice.reducer;
