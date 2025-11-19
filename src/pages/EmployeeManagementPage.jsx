@@ -477,45 +477,45 @@ const EmployeeManagementPage = () => {
                     />
                   </Grid>
                   <Grid item xs={12} sm={6}>
-                    <LocalizationProvider dateAdapter={AdapterDayjs}>
-                      <DatePicker
-                        label="Start Date"
-                        value={employee.startDate}
-                        onChange={handleDateChange}
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            required
-                            fullWidth
-                            sx={{ width: '100%' }}
-                            inputProps={{ ...params.inputProps, style: { width: '100%' } }}
-                          />
-                        )}
-                        inputFormat="DD-MM-YYYY" // Set the desired date format
-                      />
-                    </LocalizationProvider>
+                    <FormControl fullWidth>
+                      <LocalizationProvider dateAdapter={AdapterDayjs}>
+                        <DatePicker
+                          label="Start Date"
+                          value={employee.startDate}
+                          onChange={handleDateChange}
+                          renderInput={(params) => (
+                            <TextField
+                              {...params}
+                              required
+                              fullWidth
+                              sx={{ width: '100%' }}
+                            />
+                          )}
+                          inputFormat="DD-MM-YYYY" // Set the desired date format
+                        />
+                      </LocalizationProvider>
+                    </FormControl>
                   </Grid>
                   {isSuperAdmin && (
                     <Grid item xs={12} sm={6}>
-                      <FormControl fullWidth required>
-                        <InputLabel id="roles" shrink={!!employee.roles.length}>
-                          Roles
-                        </InputLabel>
-                        <Select
-                          label="Roles"
-                          multiple
-                          id="roles"
-                          name="roles"
-                          value={employee.roles}
-                          onChange={handleRoleChange}
-                          renderValue={(selected) => selected.join(", ")} // Display selected roles
-                          displayEmpty
-                        >
-                          <MenuItem value="employee">Employee</MenuItem>
-                          <MenuItem value="admin">Admin</MenuItem>
-                          {/* Add more roles as needed */}
-                        </Select>
-                      </FormControl>
+                      <TextField
+                        select
+                        SelectProps={{
+                          multiple: true,
+                        }}
+                        id="roles"
+                        name="roles"
+                        label="Roles"
+                        value={employee.roles}
+                        onChange={handleRoleChange}
+                        fullWidth
+                        required
+                        variant="outlined"
+                      >
+                        <MenuItem value="employee">Employee</MenuItem>
+                        <MenuItem value="admin">Admin</MenuItem>
+                        {/* Add more roles as needed */}
+                      </TextField>
                     </Grid>
                   )}
                 </Grid>

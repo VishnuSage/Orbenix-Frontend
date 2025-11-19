@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { lazy } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -32,10 +32,9 @@ function App() {
   console.log("Is user logged in?", isLoggedIn); // Debugging log
 
   return (
-    <Suspense fallback={<div style={{textAlign: 'center', marginTop: '2rem'}}>Loading...</div>}>
-      <NotificationProvider>
-        <Router>
-          <Routes>
+    <NotificationProvider>
+      <Router>
+        <Routes>
             {/* Employee Dashboard with sidebar and content */}
             <Route
               path="/"
@@ -143,7 +142,7 @@ function App() {
           </Routes>
         </Router>
       </NotificationProvider>
-    </Suspense>
+    // Suspense is now handled inside DashboardLayout/AdminDashboardLayout for page content only
   );
 }
 
