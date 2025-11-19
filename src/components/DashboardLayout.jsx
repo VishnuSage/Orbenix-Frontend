@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense } from "react";
+import { useState, useEffect } from "react";
 import CircularProgress from "@mui/material/CircularProgress";
 import { useLocation, Link, Outlet } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
