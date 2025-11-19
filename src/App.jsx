@@ -1,4 +1,5 @@
-import { lazy } from "react";
+import { lazy, Suspense } from "react";
+import CircularProgress from "@mui/material/CircularProgress";
 import {
   BrowserRouter as Router,
   Routes,
@@ -34,115 +35,38 @@ function App() {
   return (
     <NotificationProvider>
       <Router>
-        <Routes>
-            {/* Employee Dashboard with sidebar and content */}
-            <Route
-              path="/"
-              element={isLoggedIn ? <DashboardLayout /> : <Navigate to="/auth" />}
-            >
-              <Route
-                path="/payroll"
-                element={isLoggedIn ? <PayrollPage /> : <Navigate to="/auth" />}
-              />
-              <Route
-                path="attendance-leave"
-                element={
-                  isLoggedIn ? <AttendanceLeavePage /> : <Navigate to="/auth" />
-                }
-              />
-              <Route
-                path="performance-training"
-                element={
-                  isLoggedIn ? (
-                    <PerformanceTrainingPage />
-                  ) : (
-                    <Navigate to="/auth" />
-                  )
-                }
-              />
-              <Route
-                path="profile-settings"
-                element={
-                  isLoggedIn ? <ProfileSettingsPage /> : <Navigate to="/auth" />
-                }
-              />
-              <Route
-                path="time-tracking"
-                element={
-                  isLoggedIn ? <TimeTrackingPage /> : <Navigate to="/auth" />
-                }
-              />
-              <Route
-                path="announcements-help"
-                element={
-                  isLoggedIn ? <AnnouncementsHelpPage /> : <Navigate to="/auth" />
-                }
-              />
+        <Suspense fallback={
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '2rem' }}>
+            <CircularProgress />
+          </div>
+        }>
+          <Routes>
+            {/* Main dashboard routes */}
+            <Route path="/" element={isLoggedIn ? <DashboardLayout /> : <Navigate to="/auth" /> }>
+              <Route index element={isLoggedIn ? <PayrollPage /> : <Navigate to="/auth" />} />
+              <Route path="payroll" element={isLoggedIn ? <PayrollPage /> : <Navigate to="/auth" />} />
+              <Route path="attendance-leave" element={isLoggedIn ? <AttendanceLeavePage /> : <Navigate to="/auth" />} />
+              <Route path="performance-training" element={isLoggedIn ? <PerformanceTrainingPage /> : <Navigate to="/auth" />} />
+              <Route path="profile-settings" element={isLoggedIn ? <ProfileSettingsPage /> : <Navigate to="/auth" />} />
+              <Route path="time-tracking" element={isLoggedIn ? <TimeTrackingPage /> : <Navigate to="/auth" />} />
+              <Route path="announcements-help" element={isLoggedIn ? <AnnouncementsHelpPage /> : <Navigate to="/auth" />} />
             </Route>
-            {/* Admin Dashboard routes */}
-            <Route
-              path="/admin"
-              element={
-                isLoggedIn ? <AdminDashboardLayout /> : <Navigate to="/auth" />
-              }
-            >
-              <Route
-                path="employees"
-                element={
-                  isLoggedIn ? (
-                    <EmployeeManagementPage />
-                  ) : (
-                    <Navigate to="/auth" />
-                  )
-                }
-              />
-              <Route
-                path="admin-payroll"
-                element={
-                  isLoggedIn ? <AdminPayrollPage /> : <Navigate to="/auth" />
-                }
-              />
-              <Route
-                path="attendance"
-                element={
-                  isLoggedIn ? <AdminAttendancePage /> : <Navigate to="/auth" />
-                }
-              />
-              <Route
-                path="performance"
-                element={
-                  isLoggedIn ? (
-                    <AdminPerformanceManagementPage />
-                  ) : (
-                    <Navigate to="/auth" />
-                  )
-                }
-              />
-              <Route
-                path="time-management"
-                element={
-                  isLoggedIn ? <AdminTimeTrackingPage /> : <Navigate to="/auth" />
-                }
-              />
-              <Route
-                path="announcements"
-                element={
-                  isLoggedIn ? (
-                    <AdminAnnouncementsPage />
-                  ) : (
-                    <Navigate to="/auth" />
-                  )
-                }
-              />
+            {/* Admin dashboard routes */}
+            <Route path="/admin" element={isLoggedIn ? <AdminDashboardLayout /> : <Navigate to="/auth" /> }>
+              <Route path="employees" element={isLoggedIn ? <EmployeeManagementPage /> : <Navigate to="/auth" />} />
+              <Route path="admin-payroll" element={isLoggedIn ? <AdminPayrollPage /> : <Navigate to="/auth" />} />
+              <Route path="attendance" element={isLoggedIn ? <AdminAttendancePage /> : <Navigate to="/auth" />} />
+              <Route path="performance" element={isLoggedIn ? <AdminPerformanceManagementPage /> : <Navigate to="/auth" />} />
+              <Route path="time-management" element={isLoggedIn ? <AdminTimeTrackingPage /> : <Navigate to="/auth" />} />
+              <Route path="announcements" element={isLoggedIn ? <AdminAnnouncementsPage /> : <Navigate to="/auth" />} />
             </Route>
-            {/* Other pages */}
+            {/* Auth and 404 routes */}
             <Route path="/auth" element={<Auth />} />
-            <Route path="*" element={<NotFound />} />{" "}
-            {/* Catch-all route for 404 */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
-        </Router>
-      </NotificationProvider>
-
+        </Suspense>
+      </Router>
+    </NotificationProvider>
   );
 }
 

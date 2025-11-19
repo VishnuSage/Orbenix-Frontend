@@ -78,6 +78,12 @@ const Auth = () => {
     forgotPassword,
   } = useSelector((state) => state.auth);
 
+  // Always prefer Redux error for login, fallback to snackbarMessage for other flows
+  let displayError = error && !isRegistering && !forgotPassword ? error : snackbarMessage;
+  if (displayError === "Network error" && !isRegistering && !forgotPassword) {
+    displayError = "Invalid credentials";
+  }
+
   const validatePassword = (password) => {
     const conditions = [
       {
@@ -338,8 +344,12 @@ const Auth = () => {
             console.error("Login failed:", result.payload);
           }
         } catch (error) {
-          dispatch(setError("Login failed. Please try again."));
-          setSnackbarMessage("Login failed. Please try again.");
+          // Always set Redux error for login failures
+          let errMsg = error.message || "Login failed. Please try again.";
+          if (errMsg === "Network error") {
+            errMsg = "Invalid credentials";
+          }
+          dispatch(setError(errMsg));
           setSnackbarOpen(true);
           console.error("Error in handleAuthSubmit:", error);
         }
@@ -767,9 +777,9 @@ const Auth = () => {
           >
             <Alert
               onClose={() => setSnackbarOpen(false)}
-              severity={error ? "error" : "success"}
+              severity={displayError ? "error" : "success"}
             >
-              {error || snackbarMessage}
+              {displayError}
             </Alert>
           </Snackbar>
         </form>

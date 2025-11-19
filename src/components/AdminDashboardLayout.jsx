@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import CircularProgress from "@mui/material/CircularProgress";
 import { useLocation, Link, Outlet } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
@@ -356,7 +356,13 @@ const AdminDashboardLayout = () => {
             <LinearProgress sx={{ width: "100%", maxWidth: "600px" }} />
           </Box>
         ) : (
-          <Outlet />
+          <Suspense fallback={
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '70vh' }}>
+              <CircularProgress />
+            </Box>
+          }>
+            <Outlet />
+          </Suspense>
         )}
       </Box>
 

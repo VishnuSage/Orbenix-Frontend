@@ -78,9 +78,19 @@ export const loginEmployeeAsync = createAsyncThunk(
         roles: response.user.roles || [],
       };
     } catch (error) {
-      return rejectWithValue(
-        error.response?.data?.message || "Network error occurred during login."
-      );
+      // If error message is about credentials, show 'Invalid credentials'
+      const errMsg = error.response?.data?.message || error.message;
+      if (
+        errMsg &&
+        (errMsg.toLowerCase().includes("invalid") ||
+          errMsg.toLowerCase().includes("credentials") ||
+          errMsg.toLowerCase().includes("password") ||
+          errMsg.toLowerCase().includes("email") ||
+          errMsg.toLowerCase().includes("phone"))
+      ) {
+        return rejectWithValue("Invalid credentials");
+      }
+      return rejectWithValue("Network error");
     }
   }
 );
