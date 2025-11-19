@@ -142,7 +142,7 @@ function App() {
           </Routes>
         </Router>
       </NotificationProvider>
-    // Suspense is now handled inside DashboardLayout/AdminDashboardLayout for page content only
+
   );
 }
 
