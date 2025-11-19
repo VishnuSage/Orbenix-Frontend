@@ -356,13 +356,7 @@ const AdminDashboardLayout = () => {
             <LinearProgress sx={{ width: "100%", maxWidth: "600px" }} />
           </Box>
         ) : (
-          <Suspense fallback={
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '70vh' }}>
-              <CircularProgress />
-            </Box>
-          }>
-            <Outlet />
-          </Suspense>
+          <Outlet />
         )}
       </Box>
 
