@@ -17,7 +17,7 @@ const TimeTrackingPage = lazy(() => import("./pages/TimeTrackingPage.jsx"));
 const AnnouncementsHelpPage = lazy(() => import("./pages/AnnouncementsHelpPage.jsx"));
 const Auth = lazy(() => import("./components/Auth"));
 const NotFound = lazy(() => import("./components/NotFound"));
-const NotificationProvider = lazy(() => import("./components/NotificationContext.jsx"));
+import { NotificationProvider } from "./components/NotificationContext.jsx";
 const AdminDashboardLayout = lazy(() => import("./components/AdminDashboardLayout.jsx"));
 const AdminPayrollPage = lazy(() => import("./pages/AdminPayrollPage.jsx"));
 const EmployeeManagementPage = lazy(() => import("./pages/EmployeeManagementPage.jsx"));

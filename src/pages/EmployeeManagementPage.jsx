@@ -483,7 +483,13 @@ const EmployeeManagementPage = () => {
                         value={employee.startDate}
                         onChange={handleDateChange}
                         renderInput={(params) => (
-                          <TextField {...params} required fullWidth />
+                          <TextField
+                            {...params}
+                            required
+                            fullWidth
+                            sx={{ width: '100%' }}
+                            inputProps={{ ...params.inputProps, style: { width: '100%' } }}
+                          />
                         )}
                         inputFormat="DD-MM-YYYY" // Set the desired date format
                       />
